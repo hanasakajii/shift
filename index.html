@@ -352,7 +352,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const WORKER_URL = 'https://shift-api.cherry-blossom-pochi.workers.dev';
+const WORKER_URL = 'https://YOUR_WORKER.workers.dev'; // ← 後で設定
 
 const STORES = [
   { name: '善導寺', key: 'zendoji', closedDow: [1] },
@@ -439,8 +439,9 @@ function renderHeader() {
 // ============================================================
 async function kvGet(key) {
   try {
-    const res = await fetch(`${WORKER_URL}/get?key=${encodeURIComponent(key)}`);
-    if (!res.ok) return null;
+    const url = `${WORKER_URL}/get?key=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    if (!res.ok) { console.error('kvGet !ok', key, res.status); return null; }
     const wrapper = await res.json();
     const val = wrapper.value ?? null;
     if (val === null) return null;
@@ -448,7 +449,7 @@ async function kvGet(key) {
       try { return JSON.parse(val); } catch { return val; }
     }
     return val;
-  } catch { return null; }
+  } catch(e) { console.error('kvGet error', key, e.message); return null; }
 }
 
 async function kvSet(key, value) {
@@ -466,11 +467,16 @@ async function loadAllData() {
   showLoading();
   // スタッフデータ読み込み
   for (const store of STORES) {
-    const d = await kvGet(`staff:${store.key}`);
     try {
-      staffData[store.key] = (d && typeof d === 'object') ? d : { staff: [], minStaff: 5 };
-      if (!staffData[store.key].staff) staffData[store.key] = { staff: [], minStaff: 5 };
+      const d = await kvGet(`staff:${store.key}`);
+      console.log('staff:' + store.key, typeof d, JSON.stringify(d));
+      if (d && typeof d === 'object' && d.staff) {
+        staffData[store.key] = d;
+      } else {
+        staffData[store.key] = { staff: [], minStaff: 5 };
+      }
     } catch(e) {
+      console.error('staff load error:', store.key, e);
       staffData[store.key] = { staff: [], minStaff: 5 };
     }
   }
@@ -629,13 +635,11 @@ function renderCalCells(store, ym) {
     ].join('');
 
     const countHtml = (allStaff.length > 0 && !isCalClosed) ? '<div class="cal-count ' + countClass + '">' + countLabel + '</div>' : '';
-    const cellDiv = document.createElement('div');
-    cellDiv.className = 'cal-cell' + (isToday ? ' today' : '');
-    cellDiv.setAttribute('data-store', store.key);
-    cellDiv.setAttribute('data-date', key);
-    cellDiv.innerHTML = '<div class="cal-date">' + d + '</div><div class="cal-info">' + tags + '</div>' + countHtml;
-    cellDiv.addEventListener('click', function(){ openSheet(this.getAttribute('data-store'), this.getAttribute('data-date')); });
-    cells += cellDiv.outerHTML;
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
+      + '<div class="cal-date">' + d + '</div>'
+      + '<div class="cal-info">' + tags + '</div>'
+      + countHtml
+      + '</div>';
   }
   document.getElementById('cal-cells').innerHTML = cells;
 }
@@ -908,27 +912,19 @@ function renderDashboard() {
     `<button class="store-tab ${dashSelectedArea === a.name ? 'active' : ''}" onclick="selectDashArea('${a.name}')">${a.name}</button>`
   ).join('');
 
-  // 提出状況・人数サマリ（全店固定）
+  // 提出状況（全店固定）
   const storeRows = STORES.map(store => {
     const data = shiftData[store.key]?.[ym] ?? {};
     const isSubmitted = !!data._submitted;
-    const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
-    const allStaff = sd.staff ?? [];
-    const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
-    const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
-    const minStaff = sd.minStaff ?? 5;
-    const totalSeishain = seishainList.length;
-    const totalPart = partList.length;
-    const countLabel = totalPart > 0 ? `${totalSeishain}+${totalPart}` : `${totalSeishain}人`;
-    const countClass = totalSeishain < minStaff ? 'count-danger' : totalSeishain === minStaff ? 'count-warn' : 'count-ok';
-    return `
-      <div class="store-row">
-        <span class="store-row-name">${store.name}</span>
-        <div class="store-row-info">
-          <span class="store-status ${isSubmitted ? 'status-submitted' : 'status-pending'}">${isSubmitted ? '提出済み' : '未提出'}</span>
-          <span class="store-count-badge ${countClass}">${countLabel}</span>
-        </div>
-      </div>`;
+    const submittedDate = isSubmitted
+      ? new Date(data._submitted).toLocaleDateString('ja-JP', {month:'numeric', day:'numeric'}) + '提出'
+      : '';
+    return '<div class="store-row">'
+      + '<span class="store-row-name">' + store.name + '</span>'
+      + '<div class="store-row-info">'
+      + '<span class="store-status ' + (isSubmitted ? 'status-submitted' : 'status-pending') + '">' + (isSubmitted ? '提出済み' : '未提出') + '</span>'
+      + (isSubmitted ? '<span style="font-size:12px;color:var(--text-sub);">' + submittedDate + '</span>' : '')
+      + '</div></div>';
   }).join('');
 
   // マトリクス表示（日付×店舗）
