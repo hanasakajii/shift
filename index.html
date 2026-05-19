@@ -444,8 +444,11 @@ async function kvGet(key) {
     });
     if (!res.ok) return null;
     const text = await res.text();
-    const data = JSON.parse(text);
-    return data.value ?? null;
+    const wrapper = JSON.parse(text);
+    const val = wrapper.value ?? null;
+    if (val === null) return null;
+    // valueがJSON文字列なら展開して返す
+    try { return JSON.parse(val); } catch { return val; }
   } catch { return null; }
 }
 
@@ -466,8 +469,7 @@ async function loadAllData() {
   for (const store of STORES) {
     const d = await kvGet(`staff:${store.key}`);
     try {
-      staffData[store.key] = d ? JSON.parse(d) : { staff: [], minStaff: 5 };
-      // データの整合性チェック
+      staffData[store.key] = (d && typeof d === 'object') ? d : { staff: [], minStaff: 5 };
       if (!staffData[store.key].staff) staffData[store.key] = { staff: [], minStaff: 5 };
     } catch(e) {
       staffData[store.key] = { staff: [], minStaff: 5 };
@@ -479,15 +481,11 @@ async function loadAllData() {
   for (const store of storeList) {
     const d = await kvGet(`shift:${store.key}:${ym}`);
     if (!shiftData[store.key]) shiftData[store.key] = {};
-    try {
-      shiftData[store.key][ym] = d ? JSON.parse(d) : {};
-    } catch(e) {
-      shiftData[store.key][ym] = {};
-    }
+    shiftData[store.key][ym] = (d && typeof d === 'object') ? d : {};
   }
   // 更新ログ
   const log = await kvGet('updateLog');
-  updateLog = log ? JSON.parse(log) : [];
+  updateLog = Array.isArray(log) ? log : [];
 }
 
 async function saveShiftData(storeKey, ym) {
@@ -644,7 +642,7 @@ async function changeMonth(delta) {
     if (!shiftData[store.key]?.[ym]) {
       const d = await kvGet(`shift:${store.key}:${ym}`);
       if (!shiftData[store.key]) shiftData[store.key] = {};
-      shiftData[store.key][ym] = d ? JSON.parse(d) : {};
+      shiftData[store.key][ym] = (d && typeof d === 'object') ? d : {};
     }
   }
   renderCalendarPage();
@@ -785,7 +783,7 @@ async function saveSheet() {
     if (!shiftData[old.to]) shiftData[old.to] = {};
     if (!shiftData[old.to][targetYm]) {
       const d = await kvGet(`shift:${old.to}:${targetYm}`);
-      shiftData[old.to][targetYm] = d ? JSON.parse(d) : {};
+      shiftData[old.to][targetYm] = (d && typeof d === 'object') ? d : {};
     }
     const tData = shiftData[old.to][targetYm][dateKey] ?? { holidays: [], supports: [] };
     tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.name === old.name));
@@ -799,7 +797,7 @@ async function saveSheet() {
     if (!shiftData[sup.to]) shiftData[sup.to] = {};
     if (!shiftData[sup.to][ym]) {
       const d = await kvGet(`shift:${sup.to}:${ym}`);
-      shiftData[sup.to][ym] = d ? JSON.parse(d) : {};
+      shiftData[sup.to][ym] = (d && typeof d === 'object') ? d : {};
     }
     const tData = shiftData[sup.to][ym][dateKey] ?? { holidays: [], supports: [] };
     tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.name === sup.name));
