@@ -244,6 +244,12 @@
   }
   .input-field:focus { outline: none; border-color: var(--accent); }
 
+  /* パート切り替え */
+  .type-toggle { display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 10px; }
+  .type-btn { flex: 1; padding: 9px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card); color: var(--text-sub); border: none; }
+  .type-btn.active { background: var(--accent); color: #fff; }
+  .part-badge { font-size: 9px; color: var(--text-sub); margin-left: 2px; background: var(--accent-light); padding: 1px 4px; border-radius: 3px; }
+
   /* ============================================================
      SUBMIT BUTTON
   ============================================================ */
@@ -561,7 +567,11 @@ function renderCalCells(store, ym) {
   const today = new Date();
   const data = shiftData[store.key]?.[ym] ?? {};
   const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
-  const totalStaff = sd.staff.length;
+  const allStaff = sd.staff ?? [];
+  const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+  const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
+  const totalSeishain = seishainList.length;
+  const totalPart = partList.length;
   const minStaff = sd.minStaff ?? 5;
 
   let cells = '';
@@ -570,11 +580,15 @@ function renderCalCells(store, ym) {
     const key = `${ym}-${String(d).padStart(2,'0')}`;
     const dayData = data[key] ?? { holidays: [], supports: [] };
     const isToday = today.getFullYear() === y && today.getMonth() + 1 === m && today.getDate() === d;
-    const holidayCount = dayData.holidays?.length ?? 0;
+    const holidays = dayData.holidays ?? [];
+    const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
+    const holidayPart = holidays.filter(n => partList.includes(n)).length;
     const supOutCount = dayData.supports?.filter(s => s.from === store.key).length ?? 0;
     const supInCount = dayData.supports?.filter(s => s.to === store.key).length ?? 0;
-    const present = totalStaff - holidayCount - supOutCount + supInCount;
-    const countClass = present < minStaff ? 'count-danger' : present === minStaff ? 'count-warn' : 'count-ok';
+    const presentSeishain = totalSeishain - holidaySeishain - supOutCount + supInCount;
+    const presentPart = totalPart - holidayPart;
+    const countClass = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
+    const countLabel = totalPart > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}人`;
 
     const tags = [
       ...(dayData.holidays ?? []).slice(0,2).map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
@@ -592,7 +606,7 @@ function renderCalCells(store, ym) {
       <div class="cal-cell ${isToday ? 'today' : ''}" onclick="openSheet('${store.key}','${key}')">
         <div class="cal-date">${d}</div>
         <div class="cal-info">${tags}</div>
-        ${totalStaff > 0 ? `<div class="cal-count ${countClass}">${present}人</div>` : ''}
+        ${allStaff.length > 0 ? `<div class="cal-count ${countClass}">${countLabel}</div>` : ''}
       </div>
     `;
   }
@@ -919,15 +933,19 @@ function renderStaffMgmt() {
     `<button class="store-tab ${staffMgmtStore === s.key ? 'active' : ''}" onclick="selectStaffStore('${s.key}')">${s.name}</button>`
   ).join('');
 
-  const staffItems = sd.staff.map((name, i) => `
-    <div class="staff-list-item">
-      <span class="staff-name">${name}</span>
-      <div class="staff-actions">
-        <button class="btn-sm primary" onclick="openMoveStaff('${name}')">移動</button>
-        <button class="btn-sm danger" onclick="removeStaff('${name}')">削除</button>
+  const staffItems = sd.staff.map((s) => {
+    const name = typeof s === 'string' ? s : s.name;
+    const isPart = typeof s === 'object' && s.type === 'part';
+    return `
+      <div class="staff-list-item">
+        <span class="staff-name">${name}${isPart ? '<span class=\"part-badge\">P</span>' : ''}</span>
+        <div class="staff-actions">
+          <button class="btn-sm primary" onclick="openMoveStaff('${name}')">移動</button>
+          <button class="btn-sm danger" onclick="removeStaff('${name}')">削除</button>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   document.getElementById('content').innerHTML = `
     <div class="store-tabs">${storeTabs}</div>
@@ -945,6 +963,10 @@ function renderStaffMgmt() {
         <div class="card-header"><span class="card-title">スタッフを追加</span></div>
         <div class="card-body">
           <input class="input-field" id="new-staff-name" type="text" placeholder="名前を入力">
+          <div class="type-toggle">
+            <button class="type-btn active" id="type-seishain" onclick="selectType('seishain')">正社員</button>
+            <button class="type-btn" id="type-part" onclick="selectType('part')">パート</button>
+          </div>
           <button class="btn-primary" onclick="addStaff()">追加</button>
         </div>
       </div>
@@ -966,12 +988,20 @@ function selectStaffStore(key) {
   renderStaffMgmt();
 }
 
+let newStaffType = 'seishain';
+function selectType(type) {
+  newStaffType = type;
+  document.getElementById('type-seishain').classList.toggle('active', type === 'seishain');
+  document.getElementById('type-part').classList.toggle('active', type === 'part');
+}
+
 async function addStaff() {
   const name = document.getElementById('new-staff-name').value.trim();
   if (!name) { showToast('名前を入力してください'); return; }
   if (!staffData[staffMgmtStore]) staffData[staffMgmtStore] = { staff: [], minStaff: 5 };
-  if (staffData[staffMgmtStore].staff.includes(name)) { showToast('すでに登録されています'); return; }
-  staffData[staffMgmtStore].staff.push(name);
+  const exists = staffData[staffMgmtStore].staff.some(s => (typeof s === 'string' ? s : s.name) === name);
+  if (exists) { showToast('すでに登録されています'); return; }
+  staffData[staffMgmtStore].staff.push({ name, type: newStaffType });
   await saveStaffData(staffMgmtStore);
   showToast(`${name}を追加しました`);
   renderStaffMgmt();
@@ -979,7 +1009,7 @@ async function addStaff() {
 
 async function removeStaff(name) {
   if (!confirm(`${name}を削除しますか？`)) return;
-  staffData[staffMgmtStore].staff = staffData[staffMgmtStore].staff.filter(n => n !== name);
+  staffData[staffMgmtStore].staff = staffData[staffMgmtStore].staff.filter(s => (typeof s === 'string' ? s : s.name) !== name);
   await saveStaffData(staffMgmtStore);
   showToast(`${name}を削除しました`);
   renderStaffMgmt();
@@ -1014,7 +1044,10 @@ async function executeMove(name) {
   const destKey = document.getElementById('move-dest').value;
   staffData[staffMgmtStore].staff = staffData[staffMgmtStore].staff.filter(n => n !== name);
   if (!staffData[destKey]) staffData[destKey] = { staff: [], minStaff: 5 };
-  if (!staffData[destKey].staff.includes(name)) staffData[destKey].staff.push(name);
+  const srcStaff = staffData[staffMgmtStore] ? null : null;
+  const movingStaff = (staffData[staffMgmtStore]?.staff ?? []).find(s => (typeof s === 'string' ? s : s.name) === name) ?? { name, type: 'seishain' };
+  const alreadyExists = staffData[destKey].staff.some(s => (typeof s === 'string' ? s : s.name) === name);
+  if (!alreadyExists) staffData[destKey].staff.push(movingStaff);
   await saveStaffData(staffMgmtStore);
   await saveStaffData(destKey);
   const destName = STORES.find(s => s.key === destKey)?.name ?? destKey;
