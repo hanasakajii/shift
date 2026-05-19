@@ -352,8 +352,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const WORKER_URL = 'https://shift-api.cherry-blossom-pochi.workers.dev';
-
+const WORKER_URL = 'https://YOUR_WORKER.workers.dev'; // ← 後で設定
 
 const STORES = [
   { name: '善導寺', key: 'zendoji' },
@@ -432,9 +431,12 @@ function renderHeader() {
 // ============================================================
 async function kvGet(key) {
   try {
-    const res = await fetch(`${WORKER_URL}/get?key=${encodeURIComponent(key)}`);
+    const res = await fetch(`${WORKER_URL}/get?key=${encodeURIComponent(key)}`, {
+      headers: { 'Accept': 'application/json; charset=utf-8' }
+    });
     if (!res.ok) return null;
-    const data = await res.json();
+    const text = await res.text();
+    const data = JSON.parse(text);
     return data.value ?? null;
   } catch { return null; }
 }
@@ -443,7 +445,7 @@ async function kvSet(key, value) {
   try {
     const res = await fetch(`${WORKER_URL}/set`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ key, value })
     });
     return res.ok;
@@ -1043,10 +1045,9 @@ function openMoveStaff(name) {
 
 async function executeMove(name) {
   const destKey = document.getElementById('move-dest').value;
-  staffData[staffMgmtStore].staff = staffData[staffMgmtStore].staff.filter(n => n !== name);
   if (!staffData[destKey]) staffData[destKey] = { staff: [], minStaff: 5 };
-  const srcStaff = staffData[staffMgmtStore] ? null : null;
   const movingStaff = (staffData[staffMgmtStore]?.staff ?? []).find(s => (typeof s === 'string' ? s : s.name) === name) ?? { name, type: 'seishain' };
+  staffData[staffMgmtStore].staff = staffData[staffMgmtStore].staff.filter(s => (typeof s === 'string' ? s : s.name) !== name);
   const alreadyExists = staffData[destKey].staff.some(s => (typeof s === 'string' ? s : s.name) === name);
   if (!alreadyExists) staffData[destKey].staff.push(movingStaff);
   await saveStaffData(staffMgmtStore);
