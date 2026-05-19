@@ -355,20 +355,28 @@
 const WORKER_URL = 'https://YOUR_WORKER.workers.dev'; // ← 後で設定
 
 const STORES = [
-  { name: '善導寺', key: 'zendoji' },
-  { name: 'みやき', key: 'miyaki' },
-  { name: '津福', key: 'tsufuku' },
-  { name: '十三部', key: 'jusanbu' },
-  { name: '小森野', key: 'komorino' },
-  { name: '久留米', key: 'kurume' },
-  { name: '築町', key: 'tsukimachi' },
-  { name: '新栄町', key: 'shinsakae' },
-  { name: '四ツ山', key: 'yotsuyama' },
-  { name: '柳川駅前', key: 'ekimae' },
-  { name: '柳川', key: 'yanagawa' },
-  { name: '柳川美容', key: 'biyou' },
-  { name: '八女', key: 'yame' },
-  { name: '玉名', key: 'tamana' },
+  { name: '善導寺', key: 'zendoji', closedDow: [1] },
+  { name: 'みやき', key: 'miyaki', closedDow: [4] },
+  { name: '津福', key: 'tsufuku', closedDow: [] },
+  { name: '十三部', key: 'jusanbu', closedDow: [1] },
+  { name: '小森野', key: 'komorino', closedDow: [3] },
+  { name: '久留米', key: 'kurume', closedDow: [1] },
+  { name: '築町', key: 'tsukimachi', closedDow: [1] },
+  { name: '新栄町', key: 'shinsakae', closedDow: [1] },
+  { name: '四ツ山', key: 'yotsuyama', closedDow: [] },
+  { name: '柳川駅前', key: 'ekimae', closedDow: [] },
+  { name: '柳川', key: 'yanagawa', closedDow: [2] },
+  { name: '柳川美容', key: 'biyou', closedDow: [] },
+  { name: '八女理容', key: 'yame', closedDow: [] },
+  { name: '八女美容', key: 'yame-biyou', closedDow: [] },
+  { name: '玉名', key: 'tamana', closedDow: [] },
+]; // closedDow: 0=日,1=月,2=火,3=水,4=木,5=金,6=土
+
+const AREAS = [
+  { name: '全店', keys: null },
+  { name: '久留米エリア', keys: ['kurume', 'jusanbu', 'miyaki', 'tsufuku', 'komorino', 'zendoji'] },
+  { name: '筑後エリア', keys: ['ekimae', 'yanagawa', 'yame', 'tsukimachi', 'shinsakae', 'yotsuyama', 'tamana'] },
+  { name: '美容エリア', keys: ['yame-biyou', 'biyou'] },
 ];
 
 // ============================================================
@@ -457,7 +465,13 @@ async function loadAllData() {
   // スタッフデータ読み込み
   for (const store of STORES) {
     const d = await kvGet(`staff:${store.key}`);
-    staffData[store.key] = d ? JSON.parse(d) : { staff: [], minStaff: 5 };
+    try {
+      staffData[store.key] = d ? JSON.parse(d) : { staff: [], minStaff: 5 };
+      // データの整合性チェック
+      if (!staffData[store.key].staff) staffData[store.key] = { staff: [], minStaff: 5 };
+    } catch(e) {
+      staffData[store.key] = { staff: [], minStaff: 5 };
+    }
   }
   // シフトデータ読み込み（当月）
   const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
@@ -465,7 +479,11 @@ async function loadAllData() {
   for (const store of storeList) {
     const d = await kvGet(`shift:${store.key}:${ym}`);
     if (!shiftData[store.key]) shiftData[store.key] = {};
-    shiftData[store.key][ym] = d ? JSON.parse(d) : {};
+    try {
+      shiftData[store.key][ym] = d ? JSON.parse(d) : {};
+    } catch(e) {
+      shiftData[store.key][ym] = {};
+    }
   }
   // 更新ログ
   const log = await kvGet('updateLog');
@@ -868,25 +886,98 @@ async function toggleSubmit() {
 // ============================================================
 // DASHBOARD (Master)
 // ============================================================
+let dashSelectedArea = '全店';
+
 function renderDashboard() {
   const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+  const lastDate = new Date(currentYear, currentMonth, 0).getDate();
 
+  const currentAreaObj = AREAS.find(a => a.name === dashSelectedArea) ?? AREAS[0];
+  const filteredStores = currentAreaObj.keys
+    ? STORES.filter(s => currentAreaObj.keys.includes(s.key))
+    : STORES;
+
+  // エリアタブ
+  const areaTabs = AREAS.map(a =>
+    `<button class="store-tab ${dashSelectedArea === a.name ? 'active' : ''}" onclick="selectDashArea('${a.name}')">${a.name}</button>`
+  ).join('');
+
+  // 提出状況・人数サマリ（全店固定）
   const storeRows = STORES.map(store => {
     const data = shiftData[store.key]?.[ym] ?? {};
     const isSubmitted = !!data._submitted;
+    const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
+    const allStaff = sd.staff ?? [];
+    const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+    const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
+    const minStaff = sd.minStaff ?? 5;
+    const totalSeishain = seishainList.length;
+    const totalPart = partList.length;
+    const countLabel = totalPart > 0 ? `${totalSeishain}+${totalPart}` : `${totalSeishain}人`;
+    const countClass = totalSeishain < minStaff ? 'count-danger' : totalSeishain === minStaff ? 'count-warn' : 'count-ok';
     return `
       <div class="store-row">
         <span class="store-row-name">${store.name}</span>
         <div class="store-row-info">
-          <span class="store-status ${isSubmitted ? 'status-submitted' : 'status-pending'}">
-            ${isSubmitted ? '提出済み' : '未提出'}
-          </span>
+          <span class="store-status ${isSubmitted ? 'status-submitted' : 'status-pending'}">${isSubmitted ? '提出済み' : '未提出'}</span>
+          <span class="store-count-badge ${countClass}">${countLabel}</span>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 
-  // 提出後のログのみ
+  // マトリクス表示（日付×店舗）
+  const colW = Math.max(44, Math.floor(300 / filteredStores.length));
+  const headerCols = filteredStores.map(s =>
+    `<th style="min-width:${colW}px;font-size:10px;padding:4px 2px;text-align:center;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${colW}px;">${s.name}</th>`
+  ).join('');
+
+  const matrixRows = Array.from({length: lastDate}, (_, i) => {
+    const d = i + 1;
+    const dateKey = `${ym}-${String(d).padStart(2,'0')}`;
+    const dow = ['日','月','火','水','木','金','土'][new Date(currentYear, currentMonth-1, d).getDay()];
+    const isSun = new Date(currentYear, currentMonth-1, d).getDay() === 0;
+    const isSat = new Date(currentYear, currentMonth-1, d).getDay() === 6;
+    const dateColor = isSun ? 'color:var(--danger)' : isSat ? 'color:var(--support-in)' : '';
+
+    const cells = filteredStores.map(store => {
+      const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
+      const allStaff = sd.staff ?? [];
+      const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+      const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
+      const minStaff = sd.minStaff ?? 5;
+      const dayData = shiftData[store.key]?.[ym]?.[dateKey] ?? {};
+      const holidays = dayData.holidays ?? [];
+      const supports = dayData.supports ?? [];
+      const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
+      const holidayPart = holidays.filter(n => partList.includes(n)).length;
+      const supOut = supports.filter(s => s.from === store.key).length;
+      const supIn = supports.filter(s => s.to === store.key).length;
+      const presentSeishain = seishainList.length - holidaySeishain - supOut + supIn;
+      const presentPart = partList.length - holidayPart;
+      const cls = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
+      const label = partList.length > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}`;
+      // 定休日チェック（storeSettings優先、なければSTORESデフォルト）
+      const storeSettings = staffData[store.key] ?? {};
+      const closedDow = storeSettings.closedDow ?? store.closedDow ?? [];
+      const specialClosed = (storeSettings.specialClosedDates ?? []);
+      const dow = new Date(currentYear, currentMonth-1, d).getDay();
+      const isRegularClosed = closedDow.includes(dow);
+      const isSpecialClosed = specialClosed.includes(dateKey);
+      const isClosed = isRegularClosed || isSpecialClosed;
+      const bgStyle = isClosed ? 'background:#f5f5f3;' : '';
+      const cellContent = isClosed
+        ? `<span style="color:var(--text-sub);font-size:10px;">定</span>${seishainList.length > 0 ? '<br><span class="' + cls + '" style="font-size:10px;">' + label + '</span>' : ''}`
+        : (seishainList.length > 0 ? label : '-');
+      return '<td style="text-align:center;padding:3px 2px;font-size:11px;font-weight:700;' + bgStyle + '" class="' + (isClosed ? '' : cls) + '">' + cellContent + '</td>';
+    }).join('');
+
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:3px 6px;font-size:11px;font-weight:600;white-space:nowrap;${dateColor}">${d}(${dow})</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+
+  // 更新ログ
   const logItems = updateLog.slice(0, 20).map(l => `
     <div class="log-item">
       <div class="log-header">
@@ -894,8 +985,7 @@ function renderDashboard() {
         <span class="log-time">${new Date(l.time).toLocaleString('ja-JP', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div class="log-body">${l.text}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
   document.getElementById('content').innerHTML = `
     <div class="month-nav">
@@ -903,23 +993,46 @@ function renderDashboard() {
       <h2>${currentYear}年 ${currentMonth}月</h2>
       <button class="month-btn" onclick="changeMonth(1)">›</button>
     </div>
+
     <div class="section">
       <div class="card">
-        <div class="card-header"><span class="card-title">提出状況</span></div>
-        ${storeRows}
-      </div>
-    </div>
-    <div class="section" style="padding-top:0;">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">🔔 更新履歴（提出後の変更）</span>
-        </div>
+        <div class="card-header"><span class="card-title">🔔 更新履歴（提出後の変更）</span></div>
         <div class="card-body">
           ${logItems || '<div class="empty-state"><p>変更履歴はありません</p></div>'}
         </div>
       </div>
     </div>
+
+    <div class="section" style="padding-top:0;">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 日別人数一覧</span></div>
+        <div class="store-tabs">${areaTabs}</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border);background:var(--accent-light);">
+                <th style="padding:6px;font-size:11px;text-align:left;white-space:nowrap;">日付</th>
+                ${headerCols}
+              </tr>
+            </thead>
+            <tbody>${matrixRows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" style="padding-top:0;">
+      <div class="card">
+        <div class="card-header"><span class="card-title">提出状況</span></div>
+        ${storeRows}
+      </div>
+    </div>
   `;
+}
+
+function selectDashArea(name) {
+  dashSelectedArea = name;
+  renderDashboard();
 }
 
 // ============================================================
@@ -983,6 +1096,40 @@ function renderStaffMgmt() {
         </div>
       </div>
     </div>
+    <div class="section" style="padding-top:0;">
+      <div class="card">
+        <div class="card-header" onclick="toggleAccordion('store-settings')" style="cursor:pointer;">
+          <span class="card-title">⚙️ 詳細設定</span>
+          <span id="accordion-icon-store-settings" style="font-size:18px;color:var(--text-sub);">›</span>
+        </div>
+        <div id="accordion-store-settings" style="display:none;">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
+            <div style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:10px;">定休日</div>
+            <div class="name-chips" style="margin-bottom:12px;">
+              ${['日','月','火','水','木','金','土'].map((d,i) => {
+                const closedDow = sd.closedDow ?? (STORES.find(s=>s.key===staffMgmtStore)?.closedDow ?? []);
+                const sel = closedDow.includes(i);
+                return `<button class="name-chip ${sel ? 'selected-holiday' : ''}" onclick="toggleClosedDow(${i})" id="dow-${i}">${d}</button>`;
+              }).join('')}
+            </div>
+            <button class="btn-primary" onclick="saveClosedDow()">定休日を保存</button>
+          </div>
+          <div style="padding:12px 16px;">
+            <div style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:10px;">特別休業日（お正月・お盆等）</div>
+            <p style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">YYYY-MM-DD形式で入力（例：2026-08-13）</p>
+            <input class="input-field" id="special-close-date" type="text" placeholder="2026-08-13">
+            <button class="btn-primary" onclick="addSpecialClosed()">追加</button>
+            <div style="margin-top:10px;">
+              ${(sd.specialClosedDates ?? []).map(d => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+                  <span style="font-size:14px;">${d}</span>
+                  <button class="btn-sm danger" onclick="removeSpecialClosed('${d}')">削除</button>
+                </div>`).join('') || '<p style="font-size:13px;color:var(--text-sub);">特別休業日なし</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -1025,6 +1172,51 @@ async function saveMinStaff() {
   staffData[staffMgmtStore].minStaff = val;
   await saveStaffData(staffMgmtStore);
   showToast('最低人数を保存しました');
+}
+
+function toggleAccordion(id) {
+  const el = document.getElementById(`accordion-${id}`);
+  const icon = document.getElementById(`accordion-icon-${id}`);
+  if (!el) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  if (icon) icon.textContent = isOpen ? '›' : '⌄';
+}
+
+function toggleClosedDow(dow) {
+  if (!staffData[staffMgmtStore]) staffData[staffMgmtStore] = { staff: [], minStaff: 5 };
+  const defaultDow = STORES.find(s => s.key === staffMgmtStore)?.closedDow ?? [];
+  if (!staffData[staffMgmtStore].closedDow) staffData[staffMgmtStore].closedDow = [...defaultDow];
+  const idx = staffData[staffMgmtStore].closedDow.indexOf(dow);
+  if (idx >= 0) staffData[staffMgmtStore].closedDow.splice(idx, 1);
+  else staffData[staffMgmtStore].closedDow.push(dow);
+  document.getElementById(`dow-${dow}`).classList.toggle('selected-holiday');
+}
+
+async function saveClosedDow() {
+  await saveStaffData(staffMgmtStore);
+  showToast('定休日を保存しました');
+}
+
+async function addSpecialClosed() {
+  const val = document.getElementById('special-close-date').value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) { showToast('YYYY-MM-DD形式で入力してください'); return; }
+  if (!staffData[staffMgmtStore]) staffData[staffMgmtStore] = { staff: [], minStaff: 5 };
+  if (!staffData[staffMgmtStore].specialClosedDates) staffData[staffMgmtStore].specialClosedDates = [];
+  if (!staffData[staffMgmtStore].specialClosedDates.includes(val)) {
+    staffData[staffMgmtStore].specialClosedDates.push(val);
+    staffData[staffMgmtStore].specialClosedDates.sort();
+  }
+  await saveStaffData(staffMgmtStore);
+  showToast('特別休業日を追加しました');
+  renderStaffMgmt();
+}
+
+async function removeSpecialClosed(date) {
+  staffData[staffMgmtStore].specialClosedDates = staffData[staffMgmtStore].specialClosedDates.filter(d => d !== date);
+  await saveStaffData(staffMgmtStore);
+  showToast('削除しました');
+  renderStaffMgmt();
 }
 
 function openMoveStaff(name) {
