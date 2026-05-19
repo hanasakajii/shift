@@ -564,11 +564,18 @@ function renderCalendarPage() {
   const viewStore = isMaster ? (masterViewStore ?? STORES[0]) : currentStore;
   if (isMaster && !masterViewStore) masterViewStore = STORES[0];
 
+  // 提出状況チェック（店舗iPadのみ）
+  const ym_cal = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+  const calSubmitted = !isMaster && !!shiftData[currentStore?.key]?.[ym_cal]?._submitted;
+
   document.getElementById('content').innerHTML = `
     <div class="month-nav">
       <button class="month-btn" onclick="changeMonth(-1)">‹</button>
       <h2>${currentYear}年 ${currentMonth}月</h2>
-      <button class="month-btn" onclick="changeMonth(1)">›</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        ${calSubmitted ? '<span style="font-size:11px;font-weight:700;color:var(--ok);background:#e8f5e9;padding:3px 8px;border-radius:10px;">✅ 提出済み</span>' : ''}
+        <button class="month-btn" onclick="changeMonth(1)">›</button>
+      </div>
     </div>
     ${storeSelector}
     <div style="background:var(--card); border-bottom:1px solid var(--border);">
@@ -689,14 +696,15 @@ function renderSheetBody() {
   const staff = staffData[sheetDate.storeKey]?.staff ?? [];
   const otherStores = STORES.filter(s => s.key !== sheetDate.storeKey);
 
-  // 公休チップ
-  const holidayChips = staff.map(name => {
+  // 公休チップ（スタッフがオブジェクト形式の場合も対応）
+  const staffNames = staff.map(s => typeof s === 'string' ? s : s.name);
+  const holidayChips = staffNames.map(name => {
     const sel = sheetDraft.holidays.includes(name);
     return `<button class="name-chip ${sel ? 'selected-holiday' : ''}" onclick="toggleHoliday('${name}')">${name}</button>`;
   }).join('');
 
   // 応援（出）チップ — 公休でない人
-  const outCandidates = staff.filter(n => !sheetDraft.holidays.includes(n));
+  const outCandidates = staffNames.filter(n => !sheetDraft.holidays.includes(n));
   const selectedOut = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey).map(s => s.name);
   const outChips = outCandidates.map(name => {
     const sel = selectedOut.includes(name);
@@ -1093,20 +1101,16 @@ function renderStaffMgmt() {
     </div>
     <div class="section" style="padding-top:0;">
       <div class="card">
-        <div class="card-header"><span class="card-title">最低人数設定</span></div>
-        <div class="card-body">
-          <input class="input-field" id="min-staff" type="number" min="1" max="30" value="${sd.minStaff ?? 5}" placeholder="最低人数">
-          <button class="btn-primary" onclick="saveMinStaff()">保存</button>
-        </div>
-      </div>
-    </div>
-    <div class="section" style="padding-top:0;">
-      <div class="card">
         <div class="card-header" onclick="toggleAccordion('store-settings')" style="cursor:pointer;">
           <span class="card-title">⚙️ 詳細設定</span>
           <span id="accordion-icon-store-settings" style="font-size:18px;color:var(--text-sub);">›</span>
         </div>
         <div id="accordion-store-settings" style="display:none;">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
+            <div style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:10px;">最低人数設定</div>
+            <input class="input-field" id="min-staff" type="number" min="1" max="30" value="${sd.minStaff ?? 5}" placeholder="最低人数">
+            <button class="btn-primary" onclick="saveMinStaff()">保存</button>
+          </div>
           <div style="padding:12px 16px;border-bottom:1px solid var(--border);">
             <div style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:10px;">定休日</div>
             <div class="name-chips" style="margin-bottom:12px;">
