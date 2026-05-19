@@ -29,12 +29,12 @@
     --header-h: 56px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; background: var(--bg); font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; color: var(--text); font-size: 15px; }
+  html, body { height: 100%; background: var(--bg); font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; color: var(--text); font-size: 15px; overflow-x: hidden; }
 
   /* ============================================================
      LAYOUT
   ============================================================ */
-  #app { height: 100vh; display: flex; flex-direction: column; }
+  #app { height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
   #header {
     height: var(--header-h); background: var(--card); border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
@@ -45,7 +45,7 @@
     background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
     padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
   }
-  #content { flex: 1; overflow-y: auto; padding-bottom: calc(var(--tab-h) + 12px); }
+  #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + 12px); }
   #tab-bar {
     height: var(--tab-h); background: var(--card); border-top: 1px solid var(--border);
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
