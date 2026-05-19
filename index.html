@@ -731,11 +731,32 @@ function renderSheetBody() {
   const inDisplay = inList.length > 0
     ? inList.map(s => {
         const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
-        return `<span class="cal-tag tag-in" style="font-size:13px;padding:6px 12px;border-radius:20px;display:inline-block;margin:4px 4px 0 0;">${s.name}（${fromName}から）</span>`;
+        const label = s.type === 'count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
+        return `<span class="cal-tag tag-in" style="font-size:13px;padding:6px 12px;border-radius:20px;display:inline-block;margin:4px 4px 0 0;">${label}</span>`;
       }).join('')
     : '<span style="color:var(--text-sub);font-size:13px;">なし</span>';
 
+  // 応援要請（人数指定で誰が行くか未確定のもの）
+  const pendingRequests = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && s.type === 'count' && !s.name);
+  const pendingHtml = pendingRequests.length > 0
+    ? pendingRequests.map((sup, i) => {
+        const toName = STORES.find(x => x.key === sup.to)?.name ?? sup.to;
+        const globalIdx = sheetDraft.supports.indexOf(sup);
+        return `
+          <div style="background:#fff3e0;border:1.5px solid #ffe082;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
+            <div style="font-size:12px;font-weight:700;color:var(--warning);margin-bottom:6px;">📢 ${toName}へ${sup.count}名の応援要請</div>
+            <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">誰が行くか選んでください：</div>
+            <div class="name-chips">
+              ${outCandidates.map(n =>
+                `<button class="name-chip ${sup.name===n?'selected-out':''}" onclick="selectPendingStaff(${globalIdx},'${n}')">${n}</button>`
+              ).join('')}
+            </div>
+          </div>`;
+      }).join('')
+    : '';
+
   document.getElementById('sheet-body').innerHTML = `
+    ${pendingHtml ? `<div class="sheet-section-label">応援要請（マスターから）</div>${pendingHtml}` : ''}
     <div class="sheet-section-label">公休</div>
     <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
 
@@ -779,6 +800,11 @@ function removeSupportOut(idx) {
 function setSupportDest(idx, toKey) {
   const outItems = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey);
   outItems[idx].to = toKey;
+}
+
+function selectPendingStaff(globalIdx, name) {
+  sheetDraft.supports[globalIdx].name = sheetDraft.supports[globalIdx].name === name ? '' : name;
+  renderSheetBody();
 }
 
 async function saveSheet() {
@@ -979,7 +1005,7 @@ function renderDashboard() {
       const bgStyle = isClosed ? 'background:#f5f5f3;' : '';
       const cellContent = isClosed
         ? '<span style="color:var(--text-sub);font-size:10px;">定</span>'
-        : (seishainList.length > 0 ? label : '-');
+        : (seishainList.length > 0 ? `<span style="cursor:pointer;text-decoration:underline dotted;" onclick="openMasterSheet('${store.key}','${dateKey}')">${label}</span>` : '-');
       return '<td style="text-align:center;padding:3px 2px;font-size:11px;font-weight:700;' + bgStyle + '" class="' + (isClosed ? '' : cls) + '">' + cellContent + '</td>';
     }).join('');
 
@@ -1045,6 +1071,213 @@ function renderDashboard() {
 function selectDashArea(name) {
   dashSelectedArea = name;
   renderDashboard();
+}
+
+// ============================================================
+// MASTER SHEET（マスターからの応援設定）
+// ============================================================
+let masterSheetDate = null;
+let masterSheetDraft = { supports: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
+
+async function openMasterSheet(storeKey, dateKey) {
+  const ym = dateKey.slice(0, 7);
+  if (!shiftData[storeKey]) shiftData[storeKey] = {};
+  if (!shiftData[storeKey][ym]) {
+    const d = await kvGet(`shift:${storeKey}:${ym}`);
+    shiftData[storeKey][ym] = (d && typeof d === 'object') ? d : {};
+  }
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
+  masterSheetDate = { storeKey, dateKey, ym };
+  masterSheetDraft = {
+    supports: JSON.parse(JSON.stringify(dayData.supports ?? []))
+  };
+
+  const [y, m, d] = dateKey.split('-');
+  const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
+  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
+  document.getElementById('sheet-title').textContent = `${storeName} ${+m}月${+d}日（${dow}）`;
+  document.getElementById('sheet-subtitle').textContent = 'マスター応援設定';
+  renderMasterSheetBody();
+  document.getElementById('sheet-overlay').classList.add('open');
+  // フッターのボタンを差し替え
+  document.querySelector('.sheet-footer').innerHTML = `
+    <button class="btn-primary" onclick="saveMasterSheet()">保存</button>
+    <button class="btn-secondary" onclick="closeSheet()">キャンセル</button>
+  `;
+}
+
+function renderMasterSheetBody() {
+  const { storeKey, dateKey, ym } = masterSheetDate;
+  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
+  const otherStores = STORES.filter(s => s.key !== storeKey);
+  const sd = staffData[storeKey] ?? { staff: [] };
+  const staffNames = (sd.staff ?? []).map(s => typeof s === 'string' ? s : s.name);
+
+  // 現在の公休表示
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
+  const holidays = dayData.holidays ?? [];
+
+  // 応援設定リスト
+  const supportsOut = masterSheetDraft.supports.filter(s => s.from === storeKey);
+
+  const supportItems = supportsOut.map((sup, i) => {
+    const toName = STORES.find(s => s.key === sup.to)?.name ?? '';
+    if (sup.type === 'count') {
+      return `
+        <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-size:13px;font-weight:700;">人数指定</span>
+            <span onclick="removeMasterSupport(${i})" style="font-size:18px;color:var(--text-sub);cursor:pointer;">×</span>
+          </div>
+          <select class="store-select" onchange="setMasterSupportTo(${i},this.value)" style="margin-bottom:6px;">
+            <option value="">行き先を選択</option>
+            ${otherStores.map(s => `<option value="${s.key}" ${sup.to===s.key?'selected':''}>${s.name}</option>`).join('')}
+          </select>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+            <span style="font-size:13px;color:var(--text-sub);">人数：</span>
+            <input type="number" min="1" max="10" value="${sup.count??1}" 
+              style="width:60px;border:1.5px solid var(--border);border-radius:6px;padding:6px;font-size:14px;font-weight:700;text-align:center;font-family:inherit;"
+              onchange="setMasterSupportCount(${i},this.value)">
+            <span style="font-size:13px;color:var(--text-sub);">名</span>
+          </div>
+          ${sup.to ? `<div style="font-size:11px;color:var(--text-sub);margin-top:4px;">店舗側で誰が行くか選択します</div>` : ''}
+        </div>`;
+    } else {
+      return `
+        <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="font-size:13px;font-weight:700;">名前指定</span>
+            <span onclick="removeMasterSupport(${i})" style="font-size:18px;color:var(--text-sub);cursor:pointer;">×</span>
+          </div>
+          <select class="store-select" onchange="setMasterSupportTo(${i},this.value)" style="margin-bottom:6px;">
+            <option value="">行き先を選択</option>
+            ${otherStores.map(s => `<option value="${s.key}" ${sup.to===s.key?'selected':''}>${s.name}</option>`).join('')}
+          </select>
+          <div style="margin-top:8px;">
+            <div style="font-size:12px;color:var(--text-sub);margin-bottom:6px;">誰が行くか：</div>
+            <div class="name-chips">
+              ${staffNames.filter(n => !holidays.includes(n)).map(n =>
+                `<button class="name-chip ${sup.name===n?'selected-out':''}" onclick="setMasterSupportName(${i},'${n}')">${n}</button>`
+              ).join('') || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}
+            </div>
+          </div>
+        </div>`;
+    }
+  }).join('');
+
+  // 公休表示
+  const holidayDisplay = holidays.length > 0
+    ? holidays.map(n => `<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')
+    : '<span style="color:var(--text-sub);font-size:13px;">なし</span>';
+
+  // 応援（入）表示
+  const supIn = masterSheetDraft.supports.filter(s => s.to === storeKey);
+  const supInDisplay = supIn.length > 0
+    ? supIn.map(s => {
+        const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
+        const label = s.type === 'count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
+        return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+      }).join('')
+    : '<span style="color:var(--text-sub);font-size:13px;">なし</span>';
+
+  document.getElementById('sheet-body').innerHTML = `
+    ${holidays.length > 0 ? `
+      <div class="sheet-section-label">公休</div>
+      <div>${holidayDisplay}</div>
+    ` : ''}
+
+    <div class="sheet-section-label">応援（出）設定</div>
+    ${supportItems}
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button onclick="addMasterSupport('count')" style="flex:1;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;font-size:13px;color:var(--text-sub);cursor:pointer;font-family:inherit;">＋ 人数で指定</button>
+      <button onclick="addMasterSupport('name')" style="flex:1;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;font-size:13px;color:var(--text-sub);cursor:pointer;font-family:inherit;">＋ 名前で指定</button>
+    </div>
+
+    ${supIn.length > 0 ? `
+      <div class="sheet-section-label">応援（入）</div>
+      <div>${supInDisplay}</div>
+    ` : ''}
+  `;
+}
+
+function addMasterSupport(type) {
+  masterSheetDraft.supports.push({ type, from: masterSheetDate.storeKey, to: '', name: '', count: 1 });
+  renderMasterSheetBody();
+}
+
+function removeMasterSupport(idx) {
+  const outItems = masterSheetDraft.supports.filter(s => s.from === masterSheetDate.storeKey);
+  const item = outItems[idx];
+  masterSheetDraft.supports = masterSheetDraft.supports.filter(s => s !== item);
+  renderMasterSheetBody();
+}
+
+function setMasterSupportTo(idx, toKey) {
+  const outItems = masterSheetDraft.supports.filter(s => s.from === masterSheetDate.storeKey);
+  outItems[idx].to = toKey;
+}
+
+function setMasterSupportName(idx, name) {
+  const outItems = masterSheetDraft.supports.filter(s => s.from === masterSheetDate.storeKey);
+  outItems[idx].name = name;
+  renderMasterSheetBody();
+}
+
+function setMasterSupportCount(idx, count) {
+  const outItems = masterSheetDraft.supports.filter(s => s.from === masterSheetDate.storeKey);
+  outItems[idx].count = parseInt(count) || 1;
+}
+
+async function saveMasterSheet() {
+  const { storeKey, dateKey, ym } = masterSheetDate;
+  const invalid = masterSheetDraft.supports.filter(s => s.from === storeKey && !s.to);
+  if (invalid.length > 0) { showToast('行き先を選択してください'); return; }
+
+  if (!shiftData[storeKey]) shiftData[storeKey] = {};
+  if (!shiftData[storeKey][ym]) shiftData[storeKey][ym] = {};
+
+  // 旧応援データをクリア（このstoreKeyが送り出す分のみ）
+  const oldSupports = shiftData[storeKey][ym][dateKey]?.supports ?? [];
+  const oldOut = oldSupports.filter(s => s.from === storeKey);
+
+  // 相手店の応援（入）データを更新
+  for (const old of oldOut) {
+    if (!old.to) continue;
+    if (!shiftData[old.to]) shiftData[old.to] = {};
+    if (!shiftData[old.to][ym]) {
+      const d = await kvGet(`shift:${old.to}:${ym}`);
+      shiftData[old.to][ym] = (d && typeof d === 'object') ? d : {};
+    }
+    if (!shiftData[old.to][ym][dateKey]) shiftData[old.to][ym][dateKey] = { holidays: [], supports: [] };
+    shiftData[old.to][ym][dateKey].supports = (shiftData[old.to][ym][dateKey].supports ?? []).filter(s => !(s.from === storeKey));
+    await saveShiftData(old.to, ym);
+  }
+
+  // 新しい応援を相手店に登録
+  for (const sup of masterSheetDraft.supports.filter(s => s.from === storeKey)) {
+    if (!sup.to) continue;
+    if (!shiftData[sup.to]) shiftData[sup.to] = {};
+    if (!shiftData[sup.to][ym]) {
+      const d = await kvGet(`shift:${sup.to}:${ym}`);
+      shiftData[sup.to][ym] = (d && typeof d === 'object') ? d : {};
+    }
+    if (!shiftData[sup.to][ym][dateKey]) shiftData[sup.to][ym][dateKey] = { holidays: [], supports: [] };
+    shiftData[sup.to][ym][dateKey].supports = (shiftData[sup.to][ym][dateKey].supports ?? []).filter(s => s.from !== storeKey);
+    shiftData[sup.to][ym][dateKey].supports.push(sup);
+    await saveShiftData(sup.to, ym);
+  }
+
+  // 自店データ更新
+  if (!shiftData[storeKey][ym][dateKey]) shiftData[storeKey][ym][dateKey] = { holidays: [], supports: [] };
+  shiftData[storeKey][ym][dateKey].supports = [
+    ...masterSheetDraft.supports.filter(s => s.from === storeKey),
+    ...(shiftData[storeKey][ym][dateKey].supports ?? []).filter(s => s.to === storeKey)
+  ];
+  await saveShiftData(storeKey, ym);
+
+  closeSheet();
+  renderDashboard();
+  showToast('応援設定を保存しました');
 }
 
 // ============================================================
