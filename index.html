@@ -133,6 +133,37 @@
   .count-danger { color: var(--danger); }
 
   /* ============================================================
+     DAY DETAIL PANEL
+  ============================================================ */
+  #day-detail {
+    background: var(--card); border-top: 2px solid var(--border);
+    transition: max-height 0.3s cubic-bezier(0.32,0.72,0,1);
+    overflow: hidden; max-height: 0;
+  }
+  #day-detail.open { max-height: 50vh; overflow-y: auto; }
+  .day-detail-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--card); z-index: 1;
+  }
+  .day-detail-title { font-size: 15px; font-weight: 700; }
+  .day-detail-edit {
+    font-size: 12px; font-weight: 700; color: var(--accent);
+    padding: 4px 10px; border: 1.5px solid var(--accent);
+    border-radius: 20px; cursor: pointer; background: none;
+    font-family: inherit;
+  }
+  .day-detail-item {
+    padding: 8px 16px; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .day-detail-label {
+    font-size: 11px; font-weight: 700; color: var(--text-sub);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* ============================================================
      BOTTOM SHEET
   ============================================================ */
   .sheet-overlay {
@@ -593,6 +624,7 @@ function renderCalendarPage() {
       </div>
       <div class="cal-grid" id="cal-cells"></div>
     </div>
+    <div id="day-detail"></div>
   `;
   if (calViewMode === 'week') {
     renderCalCellsWeek(viewStore, ym);
@@ -801,8 +833,15 @@ async function changeMonth(delta) {
 // ============================================================
 // BOTTOM SHEET
 // ============================================================
+let selectedDateKey = null;
+
 function openSheet(storeKey, dateKey) {
   if (isMaster) { openMasterSheet(storeKey, dateKey); return; }
+  // 月表示のときはday-detailパネルを開く
+  if (calViewMode === 'month') {
+    openDayDetail(storeKey, dateKey);
+    return;
+  }
 
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [] };
@@ -817,6 +856,111 @@ function openSheet(storeKey, dateKey) {
   document.getElementById('sheet-title').textContent = `${+m}月${+d}日（${dow}）`;
   document.getElementById('sheet-subtitle').textContent = currentStore.name;
   renderSheetBody();
+  document.getElementById('sheet-overlay').classList.add('open');
+}
+
+function openDayDetail(storeKey, dateKey) {
+  selectedDateKey = dateKey;
+  const [y, m, d] = dateKey.split('-');
+  const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
+  const ym = dateKey.slice(0, 7);
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
+  const sd = staffData[storeKey] ?? { staff: [] };
+  const staffNames = (sd.staff ?? []).map(s => typeof s === 'string' ? s : s.name);
+
+  const holidays = dayData.holidays ?? [];
+  const supports = dayData.supports ?? [];
+  const supOut = supports.filter(s => s.from === storeKey);
+  const supIn = supports.filter(s => s.to === storeKey);
+
+  // 定休日チェック
+  const storeSettings = staffData[storeKey] ?? {};
+  const calClosedDow = storeSettings.closedDow ?? (STORES.find(s=>s.key===storeKey)?.closedDow ?? []);
+  const calSpecialClosed = storeSettings.specialClosedDates ?? [];
+  const isClosed = calClosedDow.includes(new Date(+y,+m-1,+d).getDay()) || calSpecialClosed.includes(dateKey);
+
+  // 応援要請（人数指定）
+  const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
+
+  let html = `
+    <div class="day-detail-header">
+      <span class="day-detail-title">${+m}月${+d}日（${dow}）</span>
+      <button class="day-detail-edit" onclick="openFullSheet('${storeKey}','${dateKey}')">編集</button>
+    </div>`;
+
+  if (isClosed) {
+    html += `<div class="day-detail-item"><span style="color:var(--text-sub);">定休日</span></div>`;
+  }
+
+  if (pendingRequests.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">応援要請</div>`;
+    pendingRequests.forEach(sup => {
+      const toName = STORES.find(s=>s.key===sup.to)?.name ?? sup.to;
+      html += `<div style="background:#fff3e0;border-radius:6px;padding:6px 10px;margin-top:4px;font-size:13px;color:var(--warning);font-weight:600;">📢 ${toName}へ${sup.count}名</div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (holidays.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">公休</div>
+      <div>${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')}</div>
+    </div>`;
+  }
+
+  if (supOut.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">応援（出）</div>
+      <div>${supOut.map(s=>{
+        const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
+        const label = s.type==='count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
+        return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }
+
+  if (supIn.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">応援（入）</div>
+      <div>${supIn.map(s=>{
+        const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
+        const label = s.type==='count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
+        return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }
+
+  if (!isClosed && holidays.length === 0 && supOut.length === 0 && supIn.length === 0) {
+    html += `<div class="day-detail-item" style="color:var(--text-sub);">入力なし</div>`;
+  }
+
+  const panel = document.getElementById('day-detail');
+  if (panel) {
+    panel.innerHTML = html;
+    panel.classList.add('open');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function openFullSheet(storeKey, dateKey) {
+  // 通常のボトムシートを開く
+  const ym = dateKey.slice(0, 7);
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [] };
+  sheetDate = { storeKey, dateKey, ym };
+  sheetDraft = {
+    holidays: [...(dayData.holidays ?? [])],
+    supports: JSON.parse(JSON.stringify(dayData.supports ?? []))
+  };
+  const [y, m, d] = dateKey.split('-');
+  const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
+  document.getElementById('sheet-title').textContent = `${+m}月${+d}日（${dow}）`;
+  document.getElementById('sheet-subtitle').textContent = currentStore.name;
+  renderSheetBody();
+  document.querySelector('.sheet-footer').innerHTML = `
+    <button class="btn-primary" onclick="saveSheet()">保存</button>
+    <button class="btn-secondary" onclick="closeSheet()">キャンセル</button>
+  `;
   document.getElementById('sheet-overlay').classList.add('open');
 }
 
@@ -1002,6 +1146,9 @@ async function saveSheet() {
     }
     closeSheet();
     renderCalendarPage();
+    if (selectedDateKey) {
+      setTimeout(() => openDayDetail(sheetDate.storeKey, selectedDateKey), 100);
+    }
     showToast('保存しました');
   }
 }
