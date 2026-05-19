@@ -439,11 +439,10 @@ function renderHeader() {
 // ============================================================
 async function kvGet(key) {
   try {
-    const url = `${WORKER_URL}/get?key=${encodeURIComponent(key)}`;
-    const res = await fetch(url);
+    const res = await fetch(`${WORKER_URL}?key=${encodeURIComponent(key)}`);
     if (!res.ok) { console.error('kvGet !ok', key, res.status); return null; }
     const wrapper = await res.json();
-    const val = wrapper.value ?? null;
+    const val = wrapper.data ?? null;
     if (val === null) return null;
     if (typeof val === 'string') {
       try { return JSON.parse(val); } catch { return val; }
@@ -454,13 +453,13 @@ async function kvGet(key) {
 
 async function kvSet(key, value) {
   try {
-    const res = await fetch(`${WORKER_URL}/set`, {
+    const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ key, value })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value: typeof value === 'string' ? value : JSON.stringify(value) })
     });
-    if (!res.ok) console.error('kvSet !ok', key, res.status);
-    return res.ok;
+    if (!res.ok) { console.error('kvSet !ok', key, res.status); return false; }
+    return true;
   } catch(e) {
     console.error('kvSet error', key, e.message);
     return false;
