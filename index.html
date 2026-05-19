@@ -453,12 +453,9 @@ async function kvGet(key) {
 
 async function kvSet(key, value) {
   try {
-    const payload = { key, value: typeof value === 'string' ? value : JSON.stringify(value) };
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+    const url = `${WORKER_URL}?key=${encodeURIComponent(key)}&value=${encodeURIComponent(strValue)}`;
+    const res = await fetch(url);
     if (!res.ok) { console.error('kvSet !ok', key, res.status); return false; }
     const data = await res.json();
     return data.ok === true;
