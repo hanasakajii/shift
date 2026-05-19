@@ -635,11 +635,13 @@ function renderCalCells(store, ym) {
       ...(dayData.holidays ?? []).slice(0,2).map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...(dayData.supports ?? []).filter(s => s.from === store.key).slice(0,1).map(s => {
         const toName = STORES.find(x => x.key === s.to)?.name ?? s.to;
-        return `<span class="cal-tag tag-out">${s.name}→${toName}</span>`;
+        const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
+        return `<span class="cal-tag tag-out">${label}</span>`;
       }),
       ...(dayData.supports ?? []).filter(s => s.to === store.key).slice(0,1).map(s => {
         const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
-        return `<span class="cal-tag tag-in">${s.name}(${fromName})</span>`;
+        const label = s.type === 'count' ? `${fromName}→${s.count}名` : `${s.name}(${fromName})`;
+        return `<span class="cal-tag tag-in">${label}</span>`;
       }),
     ].join('');
 
@@ -673,8 +675,7 @@ async function changeMonth(delta) {
 // BOTTOM SHEET
 // ============================================================
 function openSheet(storeKey, dateKey) {
-  // マスターは閲覧のみ
-  if (isMaster) return;
+  if (isMaster) { openMasterSheet(storeKey, dateKey); return; }
 
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [] };
@@ -1180,6 +1181,10 @@ function renderMasterSheetBody() {
       }).join('')
     : '<span style="color:var(--text-sub);font-size:13px;">なし</span>';
 
+  // この日に既存データがあるか
+  const hasData = (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.supports ?? []).length > 0
+    || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.holidays ?? []).length > 0;
+
   document.getElementById('sheet-body').innerHTML = `
     ${holidays.length > 0 ? `
       <div class="sheet-section-label">公休</div>
@@ -1196,6 +1201,12 @@ function renderMasterSheetBody() {
     ${supIn.length > 0 ? `
       <div class="sheet-section-label">応援（入）</div>
       <div>${supInDisplay}</div>
+    ` : ''}
+
+    ${hasData ? `
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <button onclick="deleteMasterDayData()" style="width:100%;padding:12px;border:1.5px solid var(--danger);border-radius:var(--radius-sm);background:none;color:var(--danger);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 この日のデータを削除</button>
+      </div>
     ` : ''}
   `;
 }
@@ -1226,6 +1237,29 @@ function setMasterSupportName(idx, name) {
 function setMasterSupportCount(idx, count) {
   const outItems = masterSheetDraft.supports.filter(s => s.from === masterSheetDate.storeKey);
   outItems[idx].count = parseInt(count) || 1;
+}
+
+async function deleteMasterDayData() {
+  if (!confirm('この日のデータをすべて削除しますか？')) return;
+  const { storeKey, dateKey, ym } = masterSheetDate;
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
+
+  // 応援先の店からも削除
+  for (const sup of dayData.supports ?? []) {
+    if (!sup.to || sup.from !== storeKey) continue;
+    if (!shiftData[sup.to]?.[ym]?.[dateKey]) continue;
+    shiftData[sup.to][ym][dateKey].supports = (shiftData[sup.to][ym][dateKey].supports ?? []).filter(s => s.from !== storeKey);
+    await saveShiftData(sup.to, ym);
+  }
+
+  if (shiftData[storeKey]?.[ym]) {
+    delete shiftData[storeKey][ym][dateKey];
+    await saveShiftData(storeKey, ym);
+  }
+  closeSheet();
+  renderCalendarPage();
+  renderDashboard();
+  showToast('削除しました');
 }
 
 async function saveMasterSheet() {
