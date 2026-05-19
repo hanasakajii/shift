@@ -459,8 +459,12 @@ async function kvSet(key, value) {
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify({ key, value })
     });
+    if (!res.ok) console.error('kvSet !ok', key, res.status);
     return res.ok;
-  } catch { return false; }
+  } catch(e) {
+    console.error('kvSet error', key, e.message);
+    return false;
+  }
 }
 
 async function loadAllData() {
@@ -1157,8 +1161,14 @@ async function addStaff() {
   const exists = staffData[staffMgmtStore].staff.some(s => (typeof s === 'string' ? s : s.name) === name);
   if (exists) { showToast('すでに登録されています'); return; }
   staffData[staffMgmtStore].staff.push({ name, type: newStaffType });
-  await saveStaffData(staffMgmtStore);
-  showToast(`${name}を追加しました`);
+  const ok = await saveStaffData(staffMgmtStore);
+  if (ok) {
+    showToast(`${name}を追加しました`);
+  } else {
+    staffData[staffMgmtStore].staff.pop();
+    showToast('保存に失敗しました。通信を確認してください');
+    return;
+  }
   renderStaffMgmt();
 }
 
