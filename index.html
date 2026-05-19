@@ -397,6 +397,8 @@ let updateLog = []; // [{store, time, text}]
 
 let sheetDate = null;
 let sheetDraft = { holidays: [], supports: [] };
+let calViewMode = 'month'; // 'month' | 'week'
+let weekOffset = 0; // 週表示時のオフセット（0=今週）
 
 // ============================================================
 // ROUTING (URL hash)
@@ -568,16 +570,23 @@ function renderCalendarPage() {
   const ym_cal = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
   const calSubmitted = !isMaster && !!shiftData[currentStore?.key]?.[ym_cal]?._submitted;
 
+  const viewToggle = `
+    <div style="display:flex;gap:4px;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--border);">
+      <button onclick="setCalViewMode('month')" style="flex:1;padding:6px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;${calViewMode==='month'?'background:var(--accent);color:#fff;border-color:var(--accent);':'background:var(--card);color:var(--text-sub);'}">月</button>
+      <button onclick="setCalViewMode('week')" style="flex:1;padding:6px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;${calViewMode==='week'?'background:var(--accent);color:#fff;border-color:var(--accent);':'background:var(--card);color:var(--text-sub);'}">週</button>
+    </div>`;
+
   document.getElementById('content').innerHTML = `
     <div class="month-nav">
-      <button class="month-btn" onclick="changeMonth(-1)">‹</button>
-      <h2>${currentYear}年 ${currentMonth}月</h2>
+      <button class="month-btn" onclick="${calViewMode==='month'?'changeMonth(-1)':'changeWeek(-1)'}">‹</button>
+      <h2 id="cal-nav-title">${calViewMode==='month'?`${currentYear}年 ${currentMonth}月`:getWeekTitle()}</h2>
       <div style="display:flex;align-items:center;gap:6px;">
         ${calSubmitted ? '<span style="font-size:11px;font-weight:700;color:var(--ok);background:#e8f5e9;padding:3px 8px;border-radius:10px;">✅ 提出済み</span>' : ''}
-        <button class="month-btn" onclick="changeMonth(1)">›</button>
+        <button class="month-btn" onclick="${calViewMode==='month'?'changeMonth(1)':'changeWeek(1)'}">›</button>
       </div>
     </div>
     ${storeSelector}
+    ${viewToggle}
     <div style="background:var(--card); border-bottom:1px solid var(--border);">
       <div class="cal-grid">
         ${['日','月','火','水','木','金','土'].map(d => `<div class="cal-dow">${d}</div>`).join('')}
@@ -585,12 +594,130 @@ function renderCalendarPage() {
       <div class="cal-grid" id="cal-cells"></div>
     </div>
   `;
-  renderCalCells(viewStore, ym);
+  if (calViewMode === 'week') {
+    renderCalCellsWeek(viewStore, ym);
+  } else {
+    renderCalCells(viewStore, ym);
+  }
 }
 
 function selectMasterStore(key) {
   masterViewStore = STORES.find(s => s.key === key);
   renderCalendarPage();
+}
+
+function setCalViewMode(mode) {
+  calViewMode = mode;
+  weekOffset = 0;
+  renderCalendarPage();
+}
+
+function getWeekDates() {
+  // 今週の日曜日を基点にweekOffsetで移動
+  const today = new Date();
+  const base = new Date(today);
+  base.setDate(today.getDate() - today.getDay() + weekOffset * 7);
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function getWeekTitle() {
+  const dates = getWeekDates();
+  const start = dates[0];
+  const end = dates[6];
+  if (start.getMonth() === end.getMonth()) {
+    return `${start.getFullYear()}年${start.getMonth()+1}月 ${start.getDate()}〜${end.getDate()}日`;
+  }
+  return `${start.getMonth()+1}/${start.getDate()} 〜 ${end.getMonth()+1}/${end.getDate()}`;
+}
+
+function changeWeek(delta) {
+  weekOffset += delta;
+  // 表示中の週の月に合わせてcurrentYear/Monthを更新
+  const dates = getWeekDates();
+  currentYear = dates[3].getFullYear(); // 水曜日基準
+  currentMonth = dates[3].getMonth() + 1;
+  renderCalendarPage();
+}
+
+async function renderCalCellsWeek(store, ym) {
+  const dates = getWeekDates();
+  const today = new Date();
+  let cells = '';
+
+  for (const date of dates) {
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+    const dateYm = `${y}-${String(m).padStart(2,'0')}`;
+    const dateKey = `${dateYm}-${String(d).padStart(2,'0')}`;
+
+    // 別月データが必要な場合は読み込み
+    if (!shiftData[store.key]?.[dateYm]) {
+      const fetched = await kvGet(`shift:${store.key}:${dateYm}`);
+      if (!shiftData[store.key]) shiftData[store.key] = {};
+      shiftData[store.key][dateYm] = (fetched && typeof fetched === 'object') ? fetched : {};
+    }
+
+    const data = shiftData[store.key]?.[dateYm] ?? {};
+    const dayData = data[dateKey] ?? { holidays: [], supports: [] };
+    const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
+    const allStaff = sd.staff ?? [];
+    const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+    const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
+    const minStaff = sd.minStaff ?? 5;
+
+    const isToday = today.getFullYear()===y && today.getMonth()+1===m && today.getDate()===d;
+
+    // 定休日チェック
+    const storeSettings = staffData[store.key] ?? {};
+    const calClosedDow = storeSettings.closedDow ?? store.closedDow ?? [];
+    const calSpecialClosed = storeSettings.specialClosedDates ?? [];
+    const dow = date.getDay();
+    const isClosed = calClosedDow.includes(dow) || calSpecialClosed.includes(dateKey);
+
+    const holidays = dayData.holidays ?? [];
+    const supports = dayData.supports ?? [];
+    const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
+    const holidayPart = holidays.filter(n => partList.includes(n)).length;
+    const supOutCount = supports.filter(s => s.from === store.key).length;
+    const supInCount = supports.filter(s => s.to === store.key).length;
+    const presentSeishain = seishainList.length - holidaySeishain - supOutCount + supInCount;
+    const presentPart = partList.length - holidayPart;
+    const countClass = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
+    const countLabel = partList.length > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}人`;
+
+    // 週表示用：全タグを表示
+    const tags = [
+      ...(isClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
+      ...holidays.map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
+      ...supports.filter(s => s.from === store.key).map(s => {
+        const toName = STORES.find(x => x.key === s.to)?.name ?? s.to;
+        const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
+        return `<span class="cal-tag tag-out">${label}</span>`;
+      }),
+      ...supports.filter(s => s.to === store.key).map(s => {
+        const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
+        const label = s.type === 'count' ? `${fromName}→${s.count}名` : `${s.name}(${fromName})`;
+        return `<span class="cal-tag tag-in">${label}</span>`;
+      }),
+    ].join('');
+
+    const countHtml = (allStaff.length > 0 && !isClosed)
+      ? `<div class="cal-count ${countClass}" style="position:static;margin-top:4px;display:block;">${countLabel}</div>` : '';
+
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
+      + '<div class="cal-date">' + d + '</div>'
+      + '<div class="cal-info">' + tags + '</div>'
+      + countHtml
+      + '</div>';
+  }
+  document.getElementById('cal-cells').innerHTML = cells;
 }
 
 function renderCalCells(store, ym) {
