@@ -141,8 +141,9 @@
     overflow: hidden;
   }
   #cal-upper {
-    flex-shrink: 0;
-    overflow-y: auto; /* ★追加: カレンダー部分がスクロール可能に */
+    flex: 1;          /* ★ cal-wrapper の残り高さをすべて受け取る */
+    min-height: 0;    /* ★ flex子要素のoverflow-yが効くために必須 */
+    overflow-y: auto; /* ★ ここがスクロールコンテナ */
     transition: flex 0.35s ease-out;
   }
   #day-detail {
