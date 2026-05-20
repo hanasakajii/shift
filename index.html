@@ -1210,7 +1210,16 @@ function setSupportDest(idx, toKey) {
 }
 
 function selectPendingStaff(globalIdx, name) {
-  sheetDraft.supports[globalIdx].name = sheetDraft.supports[globalIdx].name === name ? '' : name;
+  const sup = sheetDraft.supports[globalIdx];
+  if (sup.name === name) {
+    // 選択解除 → count表記に戻す
+    sup.name = '';
+    sup.type = 'count';
+  } else {
+    // 名前確定 → typeをnameに変換
+    sup.name = name;
+    sup.type = 'name';
+  }
   renderSheetBody();
 }
 
@@ -1241,7 +1250,8 @@ async function saveSheet() {
       shiftData[old.to][targetYm] = (d && typeof d === 'object') ? d : {};
     }
     const tData = shiftData[old.to][targetYm][dateKey] ?? { holidays: [], supports: [] };
-    tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.name === old.name));
+    // name指定かcount指定かに関わらず同じfrom・toの応援エントリを削除
+    tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.to === old.to && (s.name === old.name || old.type === 'count')));
     shiftData[old.to][targetYm][dateKey] = tData;
     await saveShiftData(old.to, targetYm);
   }
@@ -1255,7 +1265,8 @@ async function saveSheet() {
       shiftData[sup.to][ym] = (d && typeof d === 'object') ? d : {};
     }
     const tData = shiftData[sup.to][ym][dateKey] ?? { holidays: [], supports: [] };
-    tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.name === sup.name));
+    // 同じfrom・toの既存エントリ（count型含む）を先に削除してからpush
+    tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.to === sup.to));
     tData.supports.push(sup);
     shiftData[sup.to][ym][dateKey] = tData;
     await saveShiftData(sup.to, ym);
