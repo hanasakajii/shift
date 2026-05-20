@@ -142,6 +142,7 @@
   }
   #cal-upper {
     flex-shrink: 0;
+    overflow-y: auto; /* ★追加: カレンダー部分がスクロール可能に */
     transition: flex 0.35s ease-out;
   }
   #day-detail {
@@ -960,6 +961,9 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   return html;
 }
 
+// ============================================================
+// ★ showDayDetail: スクロール追従ロジック追加
+// ============================================================
 function showDayDetail(storeKey, dateKey, ismaster) {
   document.querySelectorAll('.cal-cell.selected').forEach(el => el.classList.remove('selected'));
   document.querySelectorAll('.cal-cell[data-key="' + dateKey + '"]').forEach(el => el.classList.add('selected'));
@@ -968,7 +972,11 @@ function showDayDetail(storeKey, dateKey, ismaster) {
   const contentEl = document.getElementById('day-detail-content');
   if (!panel || !contentEl) return;
   const html = buildDayDetailHTML(storeKey, dateKey, ismaster);
-  if (!panel.classList.contains('open')) {
+
+  // パネルが開いていたかどうかを先に記録
+  const wasOpen = panel.classList.contains('open');
+
+  if (!wasOpen) {
     contentEl.innerHTML = html;
     contentEl.style.opacity = '1';
     panel.classList.add('open');
@@ -979,6 +987,28 @@ function showDayDetail(storeKey, dateKey, ismaster) {
       contentEl.innerHTML = html;
       contentEl.style.opacity = '1';
     }, 150);
+  }
+
+  // ★ タップした日付セルが詳細パネルに隠れないようスクロール追従
+  const calUpper = document.getElementById('cal-upper');
+  const tappedCell = document.querySelector('.cal-cell[data-key="' + dateKey + '"]');
+  if (calUpper && tappedCell) {
+    // パネルがこれから開く場合はアニメーション開始後、
+    // すでに開いている場合はすぐに判定
+    const delay = wasOpen ? 0 : 50;
+    setTimeout(() => {
+      const cellRect = tappedCell.getBoundingClientRect();
+      const upperRect = calUpper.getBoundingClientRect();
+      // cal-wrapperの45%がパネル高さ（#day-detail.open の flex: 0 0 45% に対応）
+      const panelH = (document.getElementById('cal-wrapper')?.offsetHeight ?? 0) * 0.45;
+      // cal-upper の表示可能な下端（パネルが占有する部分を除いた位置）
+      const visibleBottom = upperRect.bottom - panelH;
+      // セルが見える領域の下端より下に出ている、または上端より上に隠れている場合にスクロール
+      if (cellRect.bottom > visibleBottom || cellRect.top < upperRect.top) {
+        const scrollTarget = calUpper.scrollTop + cellRect.bottom - visibleBottom + 12;
+        calUpper.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+      }
+    }, delay);
   }
 }
 
