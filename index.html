@@ -2001,12 +2001,74 @@ function renderStaffMgmt() {
         </div>
       </div>
     </div>
+
+    <div class="section" style="padding-top:0;">
+      <div class="card">
+        <div class="card-header" onclick="toggleAccordion('reset-data')" style="cursor:pointer;">
+          <span class="card-title">🗑 データリセット</span>
+          <span id="accordion-icon-reset-data" style="font-size:18px;color:var(--text-sub);">›</span>
+        </div>
+        <div id="accordion-reset-data" style="display:none;">
+          <div style="padding:16px;">
+            <p style="font-size:13px;color:var(--text-sub);margin-bottom:16px;">テストデータの消去に使用します。スタッフ設定は残ります。</p>
+            <button class="btn-secondary" style="margin-bottom:8px;" onclick="resetShiftData()">📅 シフトデータのみリセット</button>
+            <button class="btn-secondary" style="color:var(--danger);border:1.5px solid var(--danger);background:none;width:100%;padding:12px;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;" onclick="resetAllData()">⚠️ 全データリセット（スタッフ設定も含む）</button>
+            <div id="reset-log" style="margin-top:12px;font-size:12px;color:var(--text-sub);display:none;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 }
 
 function selectStaffStore(key) {
   staffMgmtStore = key;
   renderStaffMgmt();
+}
+
+async function resetShiftData() {
+  if (!confirm('シフトデータをすべて削除しますか？\nスタッフ設定は残ります。')) return;
+  const logEl = document.getElementById('reset-log');
+  logEl.style.display = 'block';
+  logEl.textContent = '削除中...';
+  const months = ['2026-04','2026-05','2026-06','2026-07','2026-08'];
+  let count = 0;
+  for (const store of STORES) {
+    for (const ym of months) {
+      await kvSet(`shift:${store.key}:${ym}`, JSON.stringify({}));
+      if (!shiftData[store.key]) shiftData[store.key] = {};
+      shiftData[store.key][ym] = {};
+      count++;
+    }
+  }
+  await kvSet('updateLog', JSON.stringify([]));
+  updateLog = [];
+  logEl.textContent = `完了！${count}件のシフトデータを削除しました。`;
+  showToast('シフトデータをリセットしました');
+  renderCurrentTab();
+}
+
+async function resetAllData() {
+  if (!confirm('スタッフ設定を含む全データを削除しますか？\nこの操作は取り消せません。')) return;
+  if (!confirm('本当によろしいですか？')) return;
+  const logEl = document.getElementById('reset-log');
+  logEl.style.display = 'block';
+  logEl.textContent = '削除中...';
+  const months = ['2026-04','2026-05','2026-06','2026-07','2026-08'];
+  for (const store of STORES) {
+    for (const ym of months) {
+      await kvSet(`shift:${store.key}:${ym}`, JSON.stringify({}));
+      if (!shiftData[store.key]) shiftData[store.key] = {};
+      shiftData[store.key][ym] = {};
+    }
+    await kvSet(`staff:${store.key}`, JSON.stringify({ staff: [], minStaff: 5 }));
+    staffData[store.key] = { staff: [], minStaff: 5 };
+  }
+  await kvSet('updateLog', JSON.stringify([]));
+  updateLog = [];
+  logEl.textContent = '完了！全データを削除しました。';
+  showToast('全データをリセットしました');
+  renderCurrentTab();
 }
 
 let newStaffType = 'seishain';
