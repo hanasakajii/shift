@@ -110,6 +110,7 @@
   .cal-cell.empty { background: var(--bg); cursor: default; }
   .cal-cell.today .cal-date { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .cal-date { font-size: 13px; font-weight: 600; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+  .cal-date-row { display: flex; align-items: center; gap: 3px; }
   .cal-cell:nth-child(7n+1) .cal-date { color: var(--danger); }
   .cal-cell:nth-child(7n) .cal-date { color: var(--support-in); }
   .cal-cell.today:nth-child(7n+1) .cal-date,
@@ -125,7 +126,6 @@
   .tag-in { background: #e8f2fb; color: var(--support-in); }
 
   .cal-count {
-    position: absolute; bottom: 3px; right: 4px;
     font-size: 10px; font-weight: 700;
   }
   .count-ok { color: var(--ok); }
@@ -804,11 +804,10 @@ function renderCalCells(store, ym) {
       }),
     ].join('');
 
-    const countHtml = (allStaff.length > 0 && !isCalClosed) ? '<div class="cal-count ' + countClass + '">' + countLabel + '</div>' : '';
+    const countHtml = (allStaff.length > 0 && !isCalClosed) ? '<span class="cal-count ' + countClass + '">' + countLabel + '</span>' : '';
     cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
-      + '<div class="cal-date">' + d + '</div>'
+      + '<div class="cal-date-row"><div class="cal-date">' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
-      + countHtml
       + '</div>';
   }
   document.getElementById('cal-cells').innerHTML = cells;
@@ -836,12 +835,16 @@ async function changeMonth(delta) {
 let selectedDateKey = null;
 
 function openSheet(storeKey, dateKey) {
-  if (isMaster) { openMasterSheet(storeKey, dateKey); return; }
   // 月表示のときはday-detailパネルを開く
   if (calViewMode === 'month') {
-    openDayDetail(storeKey, dateKey);
+    if (isMaster) {
+      openMasterDayDetail(storeKey, dateKey);
+    } else {
+      openDayDetail(storeKey, dateKey);
+    }
     return;
   }
+  if (isMaster) { openMasterSheet(storeKey, dateKey); return; }
 
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [] };
@@ -857,6 +860,69 @@ function openSheet(storeKey, dateKey) {
   document.getElementById('sheet-subtitle').textContent = currentStore.name;
   renderSheetBody();
   document.getElementById('sheet-overlay').classList.add('open');
+}
+
+function openMasterDayDetail(storeKey, dateKey) {
+  selectedDateKey = dateKey;
+  const [y, m, d] = dateKey.split('-');
+  const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
+  const ym = dateKey.slice(0, 7);
+  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
+  const holidays = dayData.holidays ?? [];
+  const supports = dayData.supports ?? [];
+  const supOut = supports.filter(s => s.from === storeKey);
+  const supIn = supports.filter(s => s.to === storeKey);
+
+  const storeSettings = staffData[storeKey] ?? {};
+  const calClosedDow = storeSettings.closedDow ?? (STORES.find(s=>s.key===storeKey)?.closedDow ?? []);
+  const calSpecialClosed = storeSettings.specialClosedDates ?? [];
+  const isClosed = calClosedDow.includes(new Date(+y,+m-1,+d).getDay()) || calSpecialClosed.includes(dateKey);
+
+  let html = `
+    <div class="day-detail-header">
+      <span class="day-detail-title">${storeName} ${+m}月${+d}日（${dow}）</span>
+      <button class="day-detail-edit" onclick="openMasterSheet('${storeKey}','${dateKey}')" style="font-size:18px;font-weight:700;padding:2px 10px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">＋</button>
+    </div>`;
+
+  if (isClosed) html += `<div class="day-detail-item"><span style="color:var(--text-sub);">定休日</span></div>`;
+
+  if (holidays.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">公休</div>
+      <div>${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')}</div>
+    </div>`;
+  }
+  if (supOut.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">応援（出）</div>
+      <div>${supOut.map(s=>{
+        const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
+        const label = s.type==='count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
+        return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }
+  if (supIn.length > 0) {
+    html += `<div class="day-detail-item">
+      <div class="day-detail-label">応援（入）</div>
+      <div>${supIn.map(s=>{
+        const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
+        const label = s.type==='count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
+        return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+      }).join('')}</div>
+    </div>`;
+  }
+  if (!isClosed && holidays.length===0 && supOut.length===0 && supIn.length===0) {
+    html += `<div class="day-detail-item" style="color:var(--text-sub);">入力なし</div>`;
+  }
+
+  const panel = document.getElementById('day-detail');
+  if (panel) {
+    panel.innerHTML = html;
+    panel.classList.add('open');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function openDayDetail(storeKey, dateKey) {
@@ -885,7 +951,7 @@ function openDayDetail(storeKey, dateKey) {
   let html = `
     <div class="day-detail-header">
       <span class="day-detail-title">${+m}月${+d}日（${dow}）</span>
-      <button class="day-detail-edit" onclick="openFullSheet('${storeKey}','${dateKey}')">編集</button>
+      <button class="day-detail-edit" onclick="openFullSheet('${storeKey}','${dateKey}')" style="font-size:18px;font-weight:700;padding:2px 10px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">＋</button>
     </div>`;
 
   if (isClosed) {
