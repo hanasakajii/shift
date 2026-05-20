@@ -463,8 +463,14 @@ async function init() {
 }
 
 function renderHeader() {
-  document.getElementById('header-title').textContent = isMaster ? '🗂 マスター管理' : `${currentStore.name}`;
-  document.getElementById('store-badge').textContent = isMaster ? 'MASTER' : currentStore.name;
+  if (isMaster) {
+    document.getElementById('header-title').textContent = '';
+    document.getElementById('header').style.display = 'none';
+  } else {
+    document.getElementById('header').style.display = 'flex';
+    document.getElementById('header-title').textContent = currentStore.name;
+    document.getElementById('store-badge').textContent = currentStore.name;
+  }
 }
 
 // ============================================================
@@ -551,7 +557,8 @@ async function appendLog(storeKey, text) {
 function renderTabBar() {
   const tabs = isMaster
     ? [
-        { key: 'calendar', label: '全店舗', icon: calIcon() },
+        { key: 'month', label: '月', icon: calIcon() },
+        { key: 'week', label: '週', icon: weekIcon() },
         { key: 'dashboard', label: 'ダッシュボード', icon: dashIcon() },
         { key: 'staff', label: 'スタッフ', icon: staffIcon() },
       ]
@@ -560,16 +567,29 @@ function renderTabBar() {
         { key: 'submit', label: '提出', icon: submitIcon() },
       ];
 
-  document.getElementById('tab-bar').innerHTML = tabs.map(t => `
-    <button class="tab-item ${currentTab === t.key ? 'active' : ''}" onclick="switchTab('${t.key}')">
+  document.getElementById('tab-bar').innerHTML = tabs.map(t => {
+    const isActive = isMaster
+      ? (t.key === 'month' && currentTab === 'calendar' && calViewMode === 'month')
+        || (t.key === 'week' && currentTab === 'calendar' && calViewMode === 'week')
+        || (t.key === currentTab && t.key !== 'month' && t.key !== 'week')
+      : (t.key === currentTab);
+    return `<button class="tab-item ${isActive ? 'active' : ''}" onclick="switchTab('${t.key}')">
       ${t.icon}
       <span>${t.label}</span>
-    </button>
-  `).join('');
+    </button>`;
+  }).join('');
 }
 
 function switchTab(key) {
-  currentTab = key;
+  if (key === 'month') {
+    calViewMode = 'month';
+    currentTab = 'calendar';
+  } else if (key === 'week') {
+    calViewMode = 'week';
+    currentTab = 'calendar';
+  } else {
+    currentTab = key;
+  }
   renderTabBar();
   renderCurrentTab();
 }
@@ -601,11 +621,7 @@ function renderCalendarPage() {
   const ym_cal = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
   const calSubmitted = !isMaster && !!shiftData[currentStore?.key]?.[ym_cal]?._submitted;
 
-  const viewToggle = `
-    <div style="display:flex;gap:4px;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--border);">
-      <button onclick="setCalViewMode('month')" style="flex:1;padding:6px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;${calViewMode==='month'?'background:var(--accent);color:#fff;border-color:var(--accent);':'background:var(--card);color:var(--text-sub);'}">月</button>
-      <button onclick="setCalViewMode('week')" style="flex:1;padding:6px;border-radius:20px;border:1.5px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;${calViewMode==='week'?'background:var(--accent);color:#fff;border-color:var(--accent);':'background:var(--card);color:var(--text-sub);'}">週</button>
-    </div>`;
+  const viewToggle = '';
 
   document.getElementById('content').innerHTML = `
     <div class="month-nav">
@@ -1889,6 +1905,7 @@ function showToast(msg) {
 }
 
 // SVG Icons
+function weekIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="7" y1="14" x2="17" y2="14"/><line x1="7" y1="18" x2="13" y2="18"/></svg>`; }
 function calIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>`; }
 function dashIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>`; }
 function staffIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a6 6 0 0 1 6-6h2"/><path d="M19 15l-5 5 2.5-5H13l5-5-2.5 5H19z" stroke-linejoin="round"/></svg>`; }
