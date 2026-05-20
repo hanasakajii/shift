@@ -1198,11 +1198,18 @@ async function deleteSupportFromDetail(storeKey, dateKey, idx, ismaster) {
   const target = supOut[idx];
   if (!target) return;
 
-  // 相手店からも削除
-  if (target.to && shiftData[target.to]?.[ym]?.[dateKey]) {
-    shiftData[target.to][ym][dateKey].supports = (shiftData[target.to][ym][dateKey].supports ?? [])
-      .filter(s => !(s.from === storeKey && s.to === target.to));
-    await saveShiftData(target.to, ym);
+  // 相手店からも削除（キャッシュがなければKVから取得してから削除）
+  if (target.to) {
+    if (!shiftData[target.to]) shiftData[target.to] = {};
+    if (!shiftData[target.to][ym]) {
+      const d = await kvGet(`shift:${target.to}:${ym}`);
+      shiftData[target.to][ym] = (d && typeof d === 'object') ? d : {};
+    }
+    if (shiftData[target.to][ym][dateKey]) {
+      shiftData[target.to][ym][dateKey].supports = (shiftData[target.to][ym][dateKey].supports ?? [])
+        .filter(s => !(s.from === storeKey && s.to === target.to));
+      await saveShiftData(target.to, ym);
+    }
   }
 
   shiftData[storeKey][ym][dateKey].supports = (shiftData[storeKey][ym][dateKey].supports ?? [])
