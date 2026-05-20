@@ -183,6 +183,16 @@
     font-family: inherit; display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
+  .day-detail-section-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .day-detail-add-btn {
+    font-size: 16px; font-weight: 700; color: var(--accent);
+    width: 28px; height: 28px; border: 1.5px solid var(--accent);
+    border-radius: 50%; cursor: pointer; background: none;
+    font-family: inherit; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
   .day-detail-item {
     padding: 8px 16px; border-bottom: 1px solid var(--border);
     font-size: 13px;
@@ -934,9 +944,8 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
 
   let html = `<div class="day-detail-header">
-    <button class="day-detail-close" onclick="closeDayDetail()">▽</button>
     <span class="day-detail-title">${storeName}${+m}月${+d}日（${dow}）</span>
-    <button class="day-detail-edit" onclick="${editFn}">＋</button>
+    <button class="day-detail-close" onclick="closeDayDetail()">▽</button>
   </div>`;
 
   if (isClosed) html += `<div class="day-detail-item"><span style="color:var(--text-sub);">定休日</span></div>`;
@@ -948,25 +957,53 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
     });
     html += `</div>`;
   }
-  if (holidays.length > 0) {
-    html += `<div class="day-detail-item"><div class="day-detail-label">公休</div><div>${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')}</div></div>`;
+  // 公休セクション: 店舗側のみ＋ボタン付き（マスターは応援設定のみなので不要）
+  if (!ismaster) {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">公休</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${holidays.length > 0 ? holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('') : '<span style="font-size:12px;color:var(--text-sub);">なし</span>'}
+      </div>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+    </div>`;
+  } else if (holidays.length > 0) {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">公休</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('')}
+      </div>
+    </div>`;
   }
   if (supOut.length > 0) {
-    html += `<div class="day-detail-item"><div class="day-detail-label">応援（出）</div><div>${supOut.map(s=>{
-      const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
-      const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
-      return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
-    }).join('')}</div></div>`;
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">応援（出）</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${supOut.map(s=>{
+          const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
+          const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
+          return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>`;
+        }).join('')}
+      </div>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+    </div>`;
   }
   if (supIn.length > 0) {
-    html += `<div class="day-detail-item"><div class="day-detail-label">応援（入）</div><div>${supIn.map(s=>{
-      const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
-      const label = s.type==='count'?`${fromName}から${s.count}名`:`${s.name}（${fromName}から）`;
-      return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
-    }).join('')}</div></div>`;
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">応援（入）</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${supIn.map(s=>{
+          const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
+          const label = s.type==='count'?`${fromName}から${s.count}名`:`${s.name}（${fromName}から）`;
+          return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>`;
+        }).join('')}
+      </div>
+    </div>`;
   }
-  if (!isClosed && holidays.length===0 && supOut.length===0 && supIn.length===0) {
-    html += `<div class="day-detail-item" style="color:var(--text-sub);">入力なし</div>`;
+  if (!isClosed && supOut.length===0 && supIn.length===0 && holidays.length===0) {
+    html += `<div class="day-detail-item day-detail-section-row" style="color:var(--text-sub);">
+      <span style="flex:1;">入力なし</span>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+    </div>`;
   }
   return html;
 }
@@ -974,6 +1011,9 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
 // ============================================================
 // ★ showDayDetail: スクロール追従ロジック追加
 // ============================================================
+let _detailFadeTimer = null;
+let _detailScrollTimer = null;
+
 function showDayDetail(storeKey, dateKey, ismaster) {
   document.querySelectorAll('.cal-cell.selected').forEach(el => el.classList.remove('selected'));
   document.querySelectorAll('.cal-cell[data-key="' + dateKey + '"]').forEach(el => el.classList.add('selected'));
@@ -982,6 +1022,10 @@ function showDayDetail(storeKey, dateKey, ismaster) {
   const contentEl = document.getElementById('day-detail-content');
   if (!panel || !contentEl) return;
   const html = buildDayDetailHTML(storeKey, dateKey, ismaster);
+
+  // 前のフェードタイマーをキャンセル（連続タップで二重表示になるのを防ぐ）
+  if (_detailFadeTimer) { clearTimeout(_detailFadeTimer); _detailFadeTimer = null; }
+  if (_detailScrollTimer) { clearTimeout(_detailScrollTimer); _detailScrollTimer = null; }
 
   // パネルが開いていたかどうかを先に記録
   const wasOpen = panel.classList.contains('open');
@@ -993,9 +1037,10 @@ function showDayDetail(storeKey, dateKey, ismaster) {
   } else {
     contentEl.style.transition = 'opacity 0.15s ease-out';
     contentEl.style.opacity = '0';
-    setTimeout(() => {
+    _detailFadeTimer = setTimeout(() => {
       contentEl.innerHTML = html;
       contentEl.style.opacity = '1';
+      _detailFadeTimer = null;
     }, 150);
   }
 
@@ -1005,7 +1050,7 @@ function showDayDetail(storeKey, dateKey, ismaster) {
   if (calUpper && tappedCell) {
     // パネルが開ききった後（0.35s）に計算する
     const delay = wasOpen ? 0 : 380;
-    setTimeout(() => {
+    _detailScrollTimer = setTimeout(() => {
       const upperRect = calUpper.getBoundingClientRect();
       const cellRect = tappedCell.getBoundingClientRect();
       // cal-upper 内座標でのセル下端位置
@@ -1014,6 +1059,7 @@ function showDayDetail(storeKey, dateKey, ismaster) {
       // cal-upper の clientHeight がパネル開後の表示高さ
       const targetScrollTop = cellBottomInUpper - calUpper.clientHeight;
       calUpper.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+      _detailScrollTimer = null;
     }, delay);
   }
 }
