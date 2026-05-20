@@ -408,6 +408,15 @@
   }
   .modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
 
+  /* ドラッグ並び替え */
+  .staff-drag-handle {
+    font-size: 16px; color: var(--text-sub); cursor: grab;
+    padding: 0 8px 0 0; flex-shrink: 0; user-select: none;
+  }
+  .staff-list-item { cursor: default; transition: background 0.15s; }
+  .staff-list-item.dragging { opacity: 0.4; background: var(--accent-light); }
+  .staff-list-item.drag-over { border-top: 2px solid var(--accent); }
+
   /* section tabs inside staff mgmt */
   .mgmt-tabs { display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 16px; }
   .mgmt-tab { flex: 1; padding: 9px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card); color: var(--text-sub); border: none; }
@@ -1919,11 +1928,19 @@ function renderStaffMgmt() {
     `<button class="store-tab ${staffMgmtStore === s.key ? 'active' : ''}" onclick="selectStaffStore('${s.key}')">${s.name}</button>`
   ).join('');
 
-  const staffItems = sd.staff.map((s) => {
+  const staffItems = sd.staff.map((s, i) => {
     const name = typeof s === 'string' ? s : s.name;
     const isPart = typeof s === 'object' && s.type === 'part';
     return `
-      <div class="staff-list-item">
+      <div class="staff-list-item" data-idx="${i}" id="staff-item-${i}"
+        draggable="true"
+        ondragstart="staffDragStart(event,${i})"
+        ondragover="staffDragOver(event,${i})"
+        ondragend="staffDragEnd(event)"
+        ontouchstart="staffTouchStart(event,${i})"
+        ontouchmove="staffTouchMove(event)"
+        ontouchend="staffTouchEnd(event)">
+        <span class="staff-drag-handle">☰</span>
         <span class="staff-name">${name}${isPart ? '<span class=\"part-badge\">P</span>' : ''}</span>
         <div class="staff-actions">
           <button class="btn-sm primary" onclick="openMoveStaff('${name}')">移動</button>
@@ -2021,6 +2038,122 @@ function renderStaffMgmt() {
 
 function selectStaffStore(key) {
   staffMgmtStore = key;
+  renderStaffMgmt();
+}
+
+// ============================================================
+// STAFF DRAG & DROP (Desktop) + TOUCH SORT (Mobile)
+// ============================================================
+let _dragSrcIdx = null;
+let _touchSrcIdx = null;
+let _touchClone = null;
+let _touchLongTimer = null;
+let _touchDragging = false;
+
+// --- Desktop drag ---
+function staffDragStart(e, idx) {
+  _dragSrcIdx = idx;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => {
+    const el = document.getElementById(`staff-item-${idx}`);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function staffDragOver(e, idx) {
+  e.preventDefault();
+  document.querySelectorAll('.staff-list-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+  if (idx !== _dragSrcIdx) {
+    const el = document.getElementById(`staff-item-${idx}`);
+    if (el) el.classList.add('drag-over');
+  }
+}
+
+function staffDragEnd(e) {
+  const overEl = document.querySelector('.staff-list-item.drag-over');
+  if (overEl && _dragSrcIdx !== null) {
+    const destIdx = parseInt(overEl.dataset.idx);
+    reorderStaff(_dragSrcIdx, destIdx);
+  }
+  document.querySelectorAll('.staff-list-item.dragging, .staff-list-item.drag-over')
+    .forEach(el => el.classList.remove('dragging','drag-over'));
+  _dragSrcIdx = null;
+}
+
+// --- Touch drag (long press to start) ---
+function staffTouchStart(e, idx) {
+  _touchSrcIdx = idx;
+  _touchDragging = false;
+  _touchLongTimer = setTimeout(() => {
+    _touchDragging = true;
+    // クローン要素を作成して追従させる
+    const srcEl = document.getElementById(`staff-item-${idx}`);
+    if (!srcEl) return;
+    _touchClone = srcEl.cloneNode(true);
+    _touchClone.style.cssText = `
+      position:fixed; z-index:999; width:${srcEl.offsetWidth}px;
+      opacity:0.85; background:var(--card); border-radius:var(--radius-sm);
+      box-shadow:0 4px 20px rgba(0,0,0,0.2); pointer-events:none;
+      border:1px solid var(--border);
+    `;
+    const rect = srcEl.getBoundingClientRect();
+    _touchClone.style.left = rect.left + 'px';
+    _touchClone.style.top = rect.top + 'px';
+    document.body.appendChild(_touchClone);
+    srcEl.classList.add('dragging');
+    // バイブレーション（対応端末のみ）
+    if (navigator.vibrate) navigator.vibrate(30);
+  }, 400);
+}
+
+function staffTouchMove(e) {
+  if (!_touchDragging) {
+    // 長押し前に動いたらキャンセル
+    if (Math.abs(e.touches[0].clientX) > 5 || Math.abs(e.touches[0].clientY) > 5) {
+      clearTimeout(_touchLongTimer);
+    }
+    return;
+  }
+  e.preventDefault();
+  const touch = e.touches[0];
+  if (_touchClone) {
+    _touchClone.style.left = (touch.clientX - _touchClone.offsetWidth / 2) + 'px';
+    _touchClone.style.top = (touch.clientY - 24) + 'px';
+  }
+  // どのアイテムの上にいるか判定
+  document.querySelectorAll('.staff-list-item.drag-over').forEach(el => el.classList.remove('drag-over'));
+  const els = document.querySelectorAll('.staff-list-item:not(.dragging)');
+  for (const el of els) {
+    const rect = el.getBoundingClientRect();
+    if (touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+      el.classList.add('drag-over');
+      break;
+    }
+  }
+}
+
+function staffTouchEnd(e) {
+  clearTimeout(_touchLongTimer);
+  if (_touchDragging) {
+    const overEl = document.querySelector('.staff-list-item.drag-over');
+    if (overEl && _touchSrcIdx !== null) {
+      const destIdx = parseInt(overEl.dataset.idx);
+      reorderStaff(_touchSrcIdx, destIdx);
+    }
+    document.querySelectorAll('.staff-list-item.dragging, .staff-list-item.drag-over')
+      .forEach(el => el.classList.remove('dragging','drag-over'));
+    if (_touchClone) { _touchClone.remove(); _touchClone = null; }
+  }
+  _touchDragging = false;
+  _touchSrcIdx = null;
+}
+
+async function reorderStaff(fromIdx, toIdx) {
+  if (fromIdx === toIdx) return;
+  const staff = staffData[staffMgmtStore].staff;
+  const item = staff.splice(fromIdx, 1)[0];
+  staff.splice(toIdx, 0, item);
+  await saveStaffData(staffMgmtStore);
   renderStaffMgmt();
 }
 
