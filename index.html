@@ -645,7 +645,7 @@ function renderTabBar() {
   }).join('');
 }
 
-function switchTab(key) {
+async function switchTab(key) {
   if (key === 'month') {
     calViewMode = 'month';
     currentTab = 'calendar';
@@ -656,6 +656,8 @@ function switchTab(key) {
     currentTab = key;
   }
   renderTabBar();
+  // タブ切り替え時に最新データを取得してから描画
+  await refreshCurrentData();
   renderCurrentTab();
 }
 
@@ -717,11 +719,15 @@ function renderCalendarPage() {
   }
 }
 
-function selectMasterStore(key) {
+async function selectMasterStore(key) {
   masterViewStore = STORES.find(s => s.key === key);
-  // タブのスクロール位置を保存して再描画後に復元
   const tabsEl = document.querySelector('.store-tabs');
   const scrollLeft = tabsEl ? tabsEl.scrollLeft : 0;
+  // 選択店舗の最新データを取得
+  const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+  const d = await kvGet(`shift:${key}:${ym}`);
+  if (!shiftData[key]) shiftData[key] = {};
+  shiftData[key][ym] = (d && typeof d === 'object') ? d : {};
   renderCalendarPage();
   requestAnimationFrame(() => {
     const newTabsEl = document.querySelector('.store-tabs');
@@ -902,6 +908,17 @@ function renderCalCells(store, ym) {
       + '</div>';
   }
   document.getElementById('cal-cells').innerHTML = cells;
+}
+
+// 表示中店舗の当月データを再取得
+async function refreshCurrentData() {
+  const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+  const storeList = isMaster ? STORES : [currentStore];
+  for (const store of storeList) {
+    const d = await kvGet(`shift:${store.key}:${ym}`);
+    if (!shiftData[store.key]) shiftData[store.key] = {};
+    shiftData[store.key][ym] = (d && typeof d === 'object') ? d : {};
+  }
 }
 
 async function changeMonth(delta) {
