@@ -645,7 +645,7 @@ function renderTabBar() {
   }).join('');
 }
 
-async function switchTab(key) {
+function switchTab(key) {
   if (key === 'month') {
     calViewMode = 'month';
     currentTab = 'calendar';
@@ -656,15 +656,13 @@ async function switchTab(key) {
     currentTab = key;
   }
   renderTabBar();
-  // タブ切り替え時に最新データを取得してから描画
-  await refreshCurrentData();
   renderCurrentTab();
 }
 
-async function renderCurrentTab() {
+function renderCurrentTab() {
   if (currentTab === 'calendar') {
-    await refreshCurrentData();
-    renderCalendarPage();
+    // カレンダーのみ非同期で最新取得してから描画
+    refreshCurrentData().then(() => renderCalendarPage());
   }
   else if (currentTab === 'dashboard') renderDashboard();
   else if (currentTab === 'staff') renderStaffMgmt();
