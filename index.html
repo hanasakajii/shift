@@ -135,12 +135,32 @@
   /* ============================================================
      DAY DETAIL PANEL
   ============================================================ */
-  #day-detail {
-    background: var(--card); border-top: 2px solid var(--border);
-    transition: max-height 0.3s cubic-bezier(0.32,0.72,0,1);
-    overflow: hidden; max-height: 0;
+  #cal-wrapper {
+    display: flex; flex-direction: column;
+    height: calc(100vh - var(--header-h) - var(--tab-h));
+    overflow: hidden;
   }
-  #day-detail.open { max-height: 50vh; overflow-y: auto; }
+  #cal-upper {
+    flex-shrink: 0;
+    transition: flex 0.35s ease-out;
+  }
+  #day-detail {
+    background: var(--card);
+    border-top: 2px solid var(--border);
+    flex: 0 0 0;
+    overflow: hidden;
+    transition: flex 0.35s cubic-bezier(0.32,0.72,0,1);
+  }
+  #day-detail.open {
+    flex: 0 0 45%;
+    overflow-y: auto;
+  }
+  #day-detail-content {
+    transition: opacity 0.15s ease-out;
+  }
+  #day-detail-content.fade {
+    opacity: 0;
+  }
   .day-detail-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 10px 16px; border-bottom: 1px solid var(--border);
@@ -148,10 +168,10 @@
   }
   .day-detail-title { font-size: 15px; font-weight: 700; }
   .day-detail-edit {
-    font-size: 12px; font-weight: 700; color: var(--accent);
-    padding: 4px 10px; border: 1.5px solid var(--accent);
-    border-radius: 20px; cursor: pointer; background: none;
-    font-family: inherit;
+    font-size: 18px; font-weight: 700; color: var(--accent);
+    width: 32px; height: 32px; border: 1.5px solid var(--accent);
+    border-radius: 50%; cursor: pointer; background: none;
+    font-family: inherit; display: flex; align-items: center; justify-content: center;
   }
   .day-detail-item {
     padding: 8px 16px; border-bottom: 1px solid var(--border);
@@ -162,6 +182,7 @@
     text-transform: uppercase; letter-spacing: 0.5px;
     margin-bottom: 4px;
   }
+  .cal-cell.selected { background: #f0f0ee; }
 
   /* ============================================================
      BOTTOM SHEET
@@ -624,23 +645,26 @@ function renderCalendarPage() {
   const viewToggle = '';
 
   document.getElementById('content').innerHTML = `
-    <div class="month-nav">
-      <button class="month-btn" onclick="${calViewMode==='month'?'changeMonth(-1)':'changeWeek(-1)'}">‹</button>
-      <h2 id="cal-nav-title">${calViewMode==='month'?`${currentYear}年 ${currentMonth}月`:getWeekTitle()}</h2>
-      <div style="display:flex;align-items:center;gap:6px;">
-        ${calSubmitted ? '<span style="font-size:11px;font-weight:700;color:var(--ok);background:#e8f5e9;padding:3px 8px;border-radius:10px;">✅ 提出済み</span>' : ''}
-        <button class="month-btn" onclick="${calViewMode==='month'?'changeMonth(1)':'changeWeek(1)'}">›</button>
+    <div id="cal-wrapper">
+      <div id="cal-upper">
+        <div class="month-nav">
+          <button class="month-btn" onclick="${calViewMode==='month'?'changeMonth(-1)':'changeWeek(-1)'}">‹</button>
+          <h2 id="cal-nav-title">${calViewMode==='month'?`${currentYear}年 ${currentMonth}月`:getWeekTitle()}</h2>
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${calSubmitted ? '<span style="font-size:11px;font-weight:700;color:var(--ok);background:#e8f5e9;padding:3px 8px;border-radius:10px;">✅ 提出済み</span>' : ''}
+            <button class="month-btn" onclick="${calViewMode==='month'?'changeMonth(1)':'changeWeek(1)'}">›</button>
+          </div>
+        </div>
+        ${storeSelector}
+        <div style="background:var(--card); border-bottom:1px solid var(--border);">
+          <div class="cal-grid">
+            ${['日','月','火','水','木','金','土'].map(d => `<div class="cal-dow">${d}</div>`).join('')}
+          </div>
+          <div class="cal-grid" id="cal-cells"></div>
+        </div>
       </div>
+      <div id="day-detail"><div id="day-detail-content"></div></div>
     </div>
-    ${storeSelector}
-    ${viewToggle}
-    <div style="background:var(--card); border-bottom:1px solid var(--border);">
-      <div class="cal-grid">
-        ${['日','月','火','水','木','金','土'].map(d => `<div class="cal-dow">${d}</div>`).join('')}
-      </div>
-      <div class="cal-grid" id="cal-cells"></div>
-    </div>
-    <div id="day-detail"></div>
   `;
   if (calViewMode === 'week') {
     renderCalCellsWeek(viewStore, ym);
@@ -821,7 +845,7 @@ function renderCalCells(store, ym) {
     ].join('');
 
     const countHtml = (allStaff.length > 0 && !isCalClosed) ? '<span class="cal-count ' + countClass + '">' + countLabel + '</span>' : '';
-    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" data-key="' + key + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
       + '<div class="cal-date-row"><div class="cal-date">' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
       + '</div>';
@@ -879,150 +903,87 @@ function openSheet(storeKey, dateKey) {
 }
 
 function openMasterDayDetail(storeKey, dateKey) {
-  selectedDateKey = dateKey;
-  const [y, m, d] = dateKey.split('-');
-  const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
-  const ym = dateKey.slice(0, 7);
-  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
-  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
-  const holidays = dayData.holidays ?? [];
-  const supports = dayData.supports ?? [];
-  const supOut = supports.filter(s => s.from === storeKey);
-  const supIn = supports.filter(s => s.to === storeKey);
-
-  const storeSettings = staffData[storeKey] ?? {};
-  const calClosedDow = storeSettings.closedDow ?? (STORES.find(s=>s.key===storeKey)?.closedDow ?? []);
-  const calSpecialClosed = storeSettings.specialClosedDates ?? [];
-  const isClosed = calClosedDow.includes(new Date(+y,+m-1,+d).getDay()) || calSpecialClosed.includes(dateKey);
-
-  let html = `
-    <div class="day-detail-header">
-      <span class="day-detail-title">${storeName} ${+m}月${+d}日（${dow}）</span>
-      <button class="day-detail-edit" onclick="openMasterSheet('${storeKey}','${dateKey}')" style="font-size:18px;font-weight:700;padding:2px 10px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">＋</button>
-    </div>`;
-
-  if (isClosed) html += `<div class="day-detail-item"><span style="color:var(--text-sub);">定休日</span></div>`;
-
-  if (holidays.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">公休</div>
-      <div>${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')}</div>
-    </div>`;
-  }
-  if (supOut.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">応援（出）</div>
-      <div>${supOut.map(s=>{
-        const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
-        const label = s.type==='count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
-        return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
-      }).join('')}</div>
-    </div>`;
-  }
-  if (supIn.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">応援（入）</div>
-      <div>${supIn.map(s=>{
-        const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
-        const label = s.type==='count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
-        return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
-      }).join('')}</div>
-    </div>`;
-  }
-  if (!isClosed && holidays.length===0 && supOut.length===0 && supIn.length===0) {
-    html += `<div class="day-detail-item" style="color:var(--text-sub);">入力なし</div>`;
-  }
-
-  const panel = document.getElementById('day-detail');
-  if (panel) {
-    panel.innerHTML = html;
-    panel.classList.add('open');
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  showDayDetail(storeKey, dateKey, true);
 }
 
-function openDayDetail(storeKey, dateKey) {
-  selectedDateKey = dateKey;
+function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
-  const sd = staffData[storeKey] ?? { staff: [] };
-  const staffNames = (sd.staff ?? []).map(s => typeof s === 'string' ? s : s.name);
-
   const holidays = dayData.holidays ?? [];
   const supports = dayData.supports ?? [];
   const supOut = supports.filter(s => s.from === storeKey);
   const supIn = supports.filter(s => s.to === storeKey);
-
-  // 定休日チェック
   const storeSettings = staffData[storeKey] ?? {};
   const calClosedDow = storeSettings.closedDow ?? (STORES.find(s=>s.key===storeKey)?.closedDow ?? []);
   const calSpecialClosed = storeSettings.specialClosedDates ?? [];
   const isClosed = calClosedDow.includes(new Date(+y,+m-1,+d).getDay()) || calSpecialClosed.includes(dateKey);
-
-  // 応援要請（人数指定）
+  const storeName = ismaster ? (STORES.find(s=>s.key===storeKey)?.name??storeKey)+' ' : '';
+  const editFn = ismaster ? `openMasterSheet('${storeKey}','${dateKey}')` : `openFullSheet('${storeKey}','${dateKey}')`;
   const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
 
-  let html = `
-    <div class="day-detail-header">
-      <span class="day-detail-title">${+m}月${+d}日（${dow}）</span>
-      <button class="day-detail-edit" onclick="openFullSheet('${storeKey}','${dateKey}')" style="font-size:18px;font-weight:700;padding:2px 10px;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">＋</button>
-    </div>`;
+  let html = `<div class="day-detail-header">
+    <span class="day-detail-title">${storeName}${+m}月${+d}日（${dow}）</span>
+    <button class="day-detail-edit" onclick="${editFn}">＋</button>
+  </div>`;
 
-  if (isClosed) {
-    html += `<div class="day-detail-item"><span style="color:var(--text-sub);">定休日</span></div>`;
-  }
-
+  if (isClosed) html += `<div class="day-detail-item"><span style="color:var(--text-sub);">定休日</span></div>`;
   if (pendingRequests.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">応援要請</div>`;
+    html += `<div class="day-detail-item"><div class="day-detail-label">応援要請</div>`;
     pendingRequests.forEach(sup => {
-      const toName = STORES.find(s=>s.key===sup.to)?.name ?? sup.to;
+      const toName = STORES.find(s=>s.key===sup.to)?.name??sup.to;
       html += `<div style="background:#fff3e0;border-radius:6px;padding:6px 10px;margin-top:4px;font-size:13px;color:var(--warning);font-weight:600;">📢 ${toName}へ${sup.count}名</div>`;
     });
     html += `</div>`;
   }
-
   if (holidays.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">公休</div>
-      <div>${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')}</div>
-    </div>`;
+    html += `<div class="day-detail-item"><div class="day-detail-label">公休</div><div>${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')}</div></div>`;
   }
-
   if (supOut.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">応援（出）</div>
-      <div>${supOut.map(s=>{
-        const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
-        const label = s.type==='count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
-        return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
-      }).join('')}</div>
-    </div>`;
+    html += `<div class="day-detail-item"><div class="day-detail-label">応援（出）</div><div>${supOut.map(s=>{
+      const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
+      const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
+      return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+    }).join('')}</div></div>`;
   }
-
   if (supIn.length > 0) {
-    html += `<div class="day-detail-item">
-      <div class="day-detail-label">応援（入）</div>
-      <div>${supIn.map(s=>{
-        const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
-        const label = s.type==='count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
-        return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
-      }).join('')}</div>
-    </div>`;
+    html += `<div class="day-detail-item"><div class="day-detail-label">応援（入）</div><div>${supIn.map(s=>{
+      const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
+      const label = s.type==='count'?`${fromName}から${s.count}名`:`${s.name}（${fromName}から）`;
+      return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
+    }).join('')}</div></div>`;
   }
-
-  if (!isClosed && holidays.length === 0 && supOut.length === 0 && supIn.length === 0) {
+  if (!isClosed && holidays.length===0 && supOut.length===0 && supIn.length===0) {
     html += `<div class="day-detail-item" style="color:var(--text-sub);">入力なし</div>`;
   }
+  return html;
+}
 
+function showDayDetail(storeKey, dateKey, ismaster) {
+  document.querySelectorAll('.cal-cell.selected').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.cal-cell[data-key="' + dateKey + '"]').forEach(el => el.classList.add('selected'));
+  selectedDateKey = dateKey;
   const panel = document.getElementById('day-detail');
-  if (panel) {
-    panel.innerHTML = html;
+  const contentEl = document.getElementById('day-detail-content');
+  if (!panel || !contentEl) return;
+  const html = buildDayDetailHTML(storeKey, dateKey, ismaster);
+  if (!panel.classList.contains('open')) {
+    contentEl.innerHTML = html;
+    contentEl.style.opacity = '1';
     panel.classList.add('open');
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } else {
+    contentEl.style.transition = 'opacity 0.15s ease-out';
+    contentEl.style.opacity = '0';
+    setTimeout(() => {
+      contentEl.innerHTML = html;
+      contentEl.style.opacity = '1';
+    }, 150);
   }
+}
+
+function openDayDetail(storeKey, dateKey) {
+  showDayDetail(storeKey, dateKey, false);
 }
 
 function openFullSheet(storeKey, dateKey) {
@@ -1229,7 +1190,7 @@ async function saveSheet() {
     closeSheet();
     renderCalendarPage();
     if (selectedDateKey) {
-      setTimeout(() => openDayDetail(sheetDate.storeKey, selectedDateKey), 100);
+      setTimeout(() => showDayDetail(sheetDate.storeKey, selectedDateKey, false), 100);
     }
     showToast('保存しました');
   }
