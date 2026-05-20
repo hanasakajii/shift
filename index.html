@@ -193,6 +193,30 @@
     font-family: inherit; display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
+  /* スワイプ削除 */
+  .swipe-row {
+    position: relative; overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .swipe-row-inner {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    background: var(--card);
+    transition: transform 0.25s cubic-bezier(0.32,0.72,0,1);
+    touch-action: pan-y;
+    font-size: 13px;
+    min-height: 44px;
+  }
+  .swipe-delete-btn {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 80px; background: var(--danger); color: #fff;
+    font-size: 13px; font-weight: 700; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transform: translateX(80px);
+    transition: transform 0.25s cubic-bezier(0.32,0.72,0,1);
+  }
+  .swipe-row.swiped .swipe-row-inner { transform: translateX(-80px); }
+  .swipe-row.swiped .swipe-delete-btn { transform: translateX(0); }
   .day-detail-item {
     padding: 8px 16px; border-bottom: 1px solid var(--border);
     font-size: 13px;
@@ -695,7 +719,14 @@ function renderCalendarPage() {
 
 function selectMasterStore(key) {
   masterViewStore = STORES.find(s => s.key === key);
+  // タブのスクロール位置を保存して再描画後に復元
+  const tabsEl = document.querySelector('.store-tabs');
+  const scrollLeft = tabsEl ? tabsEl.scrollLeft : 0;
   renderCalendarPage();
+  requestAnimationFrame(() => {
+    const newTabsEl = document.querySelector('.store-tabs');
+    if (newTabsEl) newTabsEl.scrollLeft = scrollLeft;
+  });
 }
 
 function setCalViewMode(mode) {
@@ -957,15 +988,28 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
     });
     html += `</div>`;
   }
-  // 公休セクション: 店舗側のみ＋ボタン付き（マスターは応援設定のみなので不要）
+  // 公休セクション
   if (!ismaster) {
-    html += `<div class="day-detail-item day-detail-section-row">
-      <div class="day-detail-label" style="margin-bottom:0;">公休</div>
-      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-        ${holidays.length > 0 ? holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('') : '<span style="font-size:12px;color:var(--text-sub);">なし</span>'}
-      </div>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
-    </div>`;
+    // 店舗側: スワイプ削除対応（名前ごとに行）
+    if (holidays.length > 0) {
+      holidays.forEach((n, i) => {
+        html += `<div class="swipe-row" id="swipe-holiday-${i}" ontouchstart="swipeStart(this,event)" ontouchmove="swipeMove(this,event)" ontouchend="swipeEnd(this,event)">
+          <div class="swipe-row-inner">
+            <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">公休</div>
+            <span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>
+            <span style="flex:1;"></span>
+            <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+          </div>
+          <button class="swipe-delete-btn" onclick="deleteHolidayFromDetail('${storeKey}','${dateKey}','${n}')">削除</button>
+        </div>`;
+      });
+    } else {
+      html += `<div class="day-detail-item day-detail-section-row">
+        <div class="day-detail-label" style="margin-bottom:0;">公休</div>
+        <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
+        <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      </div>`;
+    }
   } else if (holidays.length > 0) {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">公休</div>
@@ -974,18 +1018,24 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       </div>
     </div>`;
   }
+  // 応援（出）セクション: スワイプ削除対応
   if (supOut.length > 0) {
-    html += `<div class="day-detail-item day-detail-section-row">
-      <div class="day-detail-label" style="margin-bottom:0;">応援（出）</div>
-      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-        ${supOut.map(s=>{
-          const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
-          const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
-          return `<span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>`;
-        }).join('')}
-      </div>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
-    </div>`;
+    supOut.forEach((s, i) => {
+      const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
+      const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
+      const delFn = ismaster
+        ? `deleteSupportFromDetail('${storeKey}','${dateKey}',${i},true)`
+        : `deleteSupportFromDetail('${storeKey}','${dateKey}',${i},false)`;
+      html += `<div class="swipe-row" id="swipe-supout-${i}" ontouchstart="swipeStart(this,event)" ontouchmove="swipeMove(this,event)" ontouchend="swipeEnd(this,event)">
+        <div class="swipe-row-inner">
+          <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">応援（出）</div>
+          <span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>
+          <span style="flex:1;"></span>
+          <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+        </div>
+        <button class="swipe-delete-btn" onclick="${delFn}">削除</button>
+      </div>`;
+    });
   }
   if (supIn.length > 0) {
     html += `<div class="day-detail-item day-detail-section-row">
@@ -1065,6 +1115,82 @@ function showDayDetail(storeKey, dateKey, ismaster) {
       _detailScrollTimer = null;
     }, delay);
   }
+}
+
+// ============================================================
+// SWIPE TO DELETE
+// ============================================================
+let _swipeStartX = 0;
+let _swipeStartY = 0;
+let _swipeActive = null;
+
+function swipeStart(el, e) {
+  _swipeStartX = e.touches[0].clientX;
+  _swipeStartY = e.touches[0].clientY;
+  _swipeActive = el;
+}
+
+function swipeMove(el, e) {
+  const dx = e.touches[0].clientX - _swipeStartX;
+  const dy = e.touches[0].clientY - _swipeStartY;
+  // 縦スクロールが主体の場合は無視
+  if (Math.abs(dy) > Math.abs(dx)) return;
+  e.preventDefault();
+}
+
+function swipeEnd(el, e) {
+  const dx = e.changedTouches[0].clientX - _swipeStartX;
+  const dy = e.changedTouches[0].clientY - _swipeStartY;
+  if (Math.abs(dy) > Math.abs(dx)) return;
+  if (dx < -40) {
+    // 他の開いてるスワイプを閉じる
+    document.querySelectorAll('.swipe-row.swiped').forEach(r => {
+      if (r !== el) r.classList.remove('swiped');
+    });
+    el.classList.add('swiped');
+  } else if (dx > 20) {
+    el.classList.remove('swiped');
+  }
+}
+
+// パネル外タップでスワイプを閉じる
+document.addEventListener('touchstart', function(e) {
+  if (!e.target.closest('.swipe-row')) {
+    document.querySelectorAll('.swipe-row.swiped').forEach(r => r.classList.remove('swiped'));
+  }
+});
+
+async function deleteHolidayFromDetail(storeKey, dateKey, name) {
+  const ym = dateKey.slice(0,7);
+  if (!shiftData[storeKey]?.[ym]?.[dateKey]) return;
+  shiftData[storeKey][ym][dateKey].holidays = (shiftData[storeKey][ym][dateKey].holidays ?? []).filter(n => n !== name);
+  await saveShiftData(storeKey, ym);
+  showToast(`${name}の公休を削除しました`);
+  showDayDetail(storeKey, dateKey, false);
+  renderCalendarPage();
+  setTimeout(() => showDayDetail(storeKey, dateKey, false), 50);
+}
+
+async function deleteSupportFromDetail(storeKey, dateKey, idx, ismaster) {
+  const ym = dateKey.slice(0,7);
+  if (!shiftData[storeKey]?.[ym]?.[dateKey]) return;
+  const supOut = (shiftData[storeKey][ym][dateKey].supports ?? []).filter(s => s.from === storeKey);
+  const target = supOut[idx];
+  if (!target) return;
+
+  // 相手店からも削除
+  if (target.to && shiftData[target.to]?.[ym]?.[dateKey]) {
+    shiftData[target.to][ym][dateKey].supports = (shiftData[target.to][ym][dateKey].supports ?? [])
+      .filter(s => !(s.from === storeKey && s.to === target.to));
+    await saveShiftData(target.to, ym);
+  }
+
+  shiftData[storeKey][ym][dateKey].supports = (shiftData[storeKey][ym][dateKey].supports ?? [])
+    .filter(s => s !== target);
+  await saveShiftData(storeKey, ym);
+  showToast('応援（出）を削除しました');
+  renderCalendarPage();
+  setTimeout(() => showDayDetail(storeKey, dateKey, ismaster), 50);
 }
 
 function closeDayDetail() {
