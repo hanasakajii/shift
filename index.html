@@ -1112,14 +1112,15 @@ function renderSheetBody() {
 
   // 応援（出）チップ — 公休でない人
   const outCandidates = staffNames.filter(n => !sheetDraft.holidays.includes(n));
-  const selectedOut = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey).map(s => s.name);
+  // pending中のcount型（名前未確定）は selectedOut から除外
+  const selectedOut = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && s.name).map(s => s.name);
   const outChips = outCandidates.map(name => {
     const sel = selectedOut.includes(name);
     return `<button class="name-chip ${sel ? 'selected-out' : ''}" onclick="toggleSupportOut('${name}')">${name}</button>`;
   }).join('');
 
-  // 応援（出）詳細
-  const outDetails = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey).map((s, i) => `
+  // 応援（出）詳細（pending中のcount型＝名前未確定は除外）
+  const outDetails = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && !(s.type === 'count' && !s.name)).map((s, i) => `
     <div class="support-item">
       <div class="support-item-header">
         <span class="support-item-name">${s.name}</span>
@@ -1225,7 +1226,8 @@ function selectPendingStaff(globalIdx, name) {
 
 async function saveSheet() {
   // バリデーション：行き先未選択チェック
-  const invalid = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && !s.to);
+  // name確定済みまたは店舗自身が追加した応援のみバリデーション対象（pending未確定は除外）
+  const invalid = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && !s.to && !(s.type === 'count' && !s.name));
   if (invalid.length > 0) {
     showToast('行き先店舗を選択してください');
     return;
@@ -1238,7 +1240,10 @@ async function saveSheet() {
   // 旧データの応援（出）を取得し、他店への反映を更新
   const oldData = shiftData[storeKey][ym][dateKey] ?? { holidays: [], supports: [] };
   const oldSupportsOut = (oldData.supports ?? []).filter(s => s.from === storeKey);
-  const newSupportsOut = sheetDraft.supports.filter(s => s.from === storeKey);
+  const newSupportsOut = sheetDraft.supports.filter(s => s.from === storeKey).map(s => {
+    if (s.type === 'count' && s.name) return { ...s, type: 'name' };
+    return s;
+  });
 
   // 削除された応援（出）を相手店から削除
   for (const old of oldSupportsOut) {
@@ -1272,11 +1277,18 @@ async function saveSheet() {
     await saveShiftData(sup.to, ym);
   }
 
+  // name確定済みのcount型エントリを強制的にname型に変換してから保存
+  // name未確定のcount型（pendingのまま保存）はそのまま残す、確定済みはname型に変換
+  const normalizedSupports = sheetDraft.supports.filter(s => s.from === storeKey).map(s => {
+    if (s.type === 'count' && s.name) return { ...s, type: 'name' };
+    return s;
+  });
+
   // 自店データ保存
   shiftData[storeKey][ym][dateKey] = {
     holidays: sheetDraft.holidays,
     supports: [
-      ...sheetDraft.supports.filter(s => s.from === storeKey),
+      ...normalizedSupports,
       ...(shiftData[storeKey][ym][dateKey]?.supports ?? []).filter(s => s.to === storeKey)
     ]
   };
