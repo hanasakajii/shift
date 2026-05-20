@@ -674,9 +674,13 @@ function switchTab(key) {
 
 function renderCurrentTab() {
   if (currentTab === 'calendar') {
-    // まずキャッシュで即描画、裏で最新取得後に再描画
+    // まずキャッシュで即描画
     renderCalendarPage();
-    refreshCurrentData().then(() => renderCalendarPage());
+    // 裏で最新取得→カレンダーのままなら再描画
+    const tabAtStart = currentTab;
+    refreshCurrentData().then(() => {
+      if (currentTab === tabAtStart) renderCalendarPage();
+    });
   }
   else if (currentTab === 'dashboard') renderDashboard();
   else if (currentTab === 'staff') renderStaffMgmt();
@@ -1614,8 +1618,8 @@ function renderDashboard() {
     </tr>`;
   }).join('');
 
-  // 更新ログ
-  const logItems = updateLog.slice(0, 20).map(l => `
+  // 更新ログ（5件表示、もっとみるで残りを展開）
+  const logVisible = updateLog.slice(0, 5).map(l => `
     <div class="log-item">
       <div class="log-header">
         <span class="log-store">${l.store}</span>
@@ -1623,6 +1627,23 @@ function renderDashboard() {
       </div>
       <div class="log-body">${l.text}</div>
     </div>`).join('');
+  const logHidden = updateLog.slice(5, 100).map(l => `
+    <div class="log-item">
+      <div class="log-header">
+        <span class="log-store">${l.store}</span>
+        <span class="log-time">${new Date(l.time).toLocaleString('ja-JP', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div class="log-body">${l.text}</div>
+    </div>`).join('');
+  const logMoreBtn = updateLog.length > 5 ? `
+    <div id="log-more-wrap" style="display:block;">
+      <button onclick="toggleLogMore()" id="log-more-btn"
+        style="width:100%;padding:10px;border:none;background:none;font-size:13px;color:var(--text-sub);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
+        <span id="log-more-label">▼ もっとみる（${updateLog.length - 5}件）</span>
+      </button>
+      <div id="log-hidden-items" style="display:none;">${logHidden}</div>
+    </div>` : '';
+  const logItems = logVisible + logMoreBtn;
 
   document.getElementById('content').innerHTML = `
     <div class="month-nav">
@@ -1665,6 +1686,17 @@ function renderDashboard() {
       </div>
     </div>
   `;
+}
+
+function toggleLogMore() {
+  const hidden = document.getElementById('log-hidden-items');
+  const label = document.getElementById('log-more-label');
+  if (!hidden || !label) return;
+  const isOpen = hidden.style.display !== 'none';
+  hidden.style.display = isOpen ? 'none' : 'block';
+  label.textContent = isOpen
+    ? `▼ もっとみる（${hidden.querySelectorAll('.log-item').length}件）`
+    : '▲ 閉じる';
 }
 
 function selectDashArea(name) {
