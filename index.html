@@ -1023,26 +1023,29 @@ function showDayDetail(storeKey, dateKey, ismaster) {
   if (!panel || !contentEl) return;
   const html = buildDayDetailHTML(storeKey, dateKey, ismaster);
 
-  // 前のフェードタイマーをキャンセル（連続タップで二重表示になるのを防ぐ）
+  // 前のタイマーをキャンセル
   if (_detailFadeTimer) { clearTimeout(_detailFadeTimer); _detailFadeTimer = null; }
   if (_detailScrollTimer) { clearTimeout(_detailScrollTimer); _detailScrollTimer = null; }
 
   // パネルが開いていたかどうかを先に記録
   const wasOpen = panel.classList.contains('open');
 
+  // 内容を即座に書き換える（フェード中に別日タップで二重表示になるのを防ぐ）
+  contentEl.style.transition = 'none';
+  contentEl.style.opacity = '0';
+  contentEl.innerHTML = html;
+
   if (!wasOpen) {
-    contentEl.innerHTML = html;
-    contentEl.style.opacity = '1';
     panel.classList.add('open');
-  } else {
-    contentEl.style.transition = 'opacity 0.15s ease-out';
-    contentEl.style.opacity = '0';
-    _detailFadeTimer = setTimeout(() => {
-      contentEl.innerHTML = html;
-      contentEl.style.opacity = '1';
-      _detailFadeTimer = null;
-    }, 150);
   }
+
+  // 次フレームでフェードイン
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      contentEl.style.transition = 'opacity 0.15s ease-out';
+      contentEl.style.opacity = '1';
+    });
+  });
 
   // ★ タップした日付セルの真下にパネル上端がくるようスクロール
   const calUpper = document.getElementById('cal-upper');
