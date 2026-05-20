@@ -1885,7 +1885,15 @@ async function saveMasterSheet() {
   await saveShiftData(storeKey, ym);
 
   closeSheet();
-  renderDashboard();
+  // 保存前にいた画面に戻る（カレンダーからならカレンダー、ダッシュボードからならダッシュボード）
+  if (currentTab === 'calendar') {
+    renderCalendarPage();
+    if (masterSheetDate) {
+      setTimeout(() => showDayDetail(masterSheetDate.storeKey, masterSheetDate.dateKey, true), 100);
+    }
+  } else {
+    renderDashboard();
+  }
   showToast('応援設定を保存しました');
 }
 
