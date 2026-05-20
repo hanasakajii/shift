@@ -164,16 +164,24 @@
     opacity: 0;
   }
   .day-detail-header {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 8px;
     padding: 10px 16px; border-bottom: 1px solid var(--border);
     position: sticky; top: 0; background: var(--card); z-index: 1;
   }
-  .day-detail-title { font-size: 15px; font-weight: 700; }
+  .day-detail-title { font-size: 15px; font-weight: 700; flex: 1; }
   .day-detail-edit {
     font-size: 18px; font-weight: 700; color: var(--accent);
     width: 32px; height: 32px; border: 1.5px solid var(--accent);
     border-radius: 50%; cursor: pointer; background: none;
     font-family: inherit; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .day-detail-close {
+    font-size: 14px; color: var(--text-sub);
+    width: 32px; height: 32px; border: 1.5px solid var(--border);
+    border-radius: 50%; cursor: pointer; background: none;
+    font-family: inherit; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
   }
   .day-detail-item {
     padding: 8px 16px; border-bottom: 1px solid var(--border);
@@ -926,6 +934,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
 
   let html = `<div class="day-detail-header">
+    <button class="day-detail-close" onclick="closeDayDetail()">▽</button>
     <span class="day-detail-title">${storeName}${+m}月${+d}日（${dow}）</span>
     <button class="day-detail-edit" onclick="${editFn}">＋</button>
   </div>`;
@@ -990,27 +999,30 @@ function showDayDetail(storeKey, dateKey, ismaster) {
     }, 150);
   }
 
-  // ★ タップした日付セルが詳細パネルに隠れないようスクロール追従
+  // ★ タップした日付セルの真下にパネル上端がくるようスクロール
   const calUpper = document.getElementById('cal-upper');
   const tappedCell = document.querySelector('.cal-cell[data-key="' + dateKey + '"]');
   if (calUpper && tappedCell) {
-    // パネルがこれから開く場合はアニメーション開始後、
-    // すでに開いている場合はすぐに判定
-    const delay = wasOpen ? 0 : 50;
+    // パネルが開ききった後（0.35s）に計算する
+    const delay = wasOpen ? 0 : 380;
     setTimeout(() => {
-      const cellRect = tappedCell.getBoundingClientRect();
       const upperRect = calUpper.getBoundingClientRect();
-      // cal-wrapperの45%がパネル高さ（#day-detail.open の flex: 0 0 45% に対応）
-      const panelH = (document.getElementById('cal-wrapper')?.offsetHeight ?? 0) * 0.45;
-      // cal-upper の表示可能な下端（パネルが占有する部分を除いた位置）
-      const visibleBottom = upperRect.bottom - panelH;
-      // セルが見える領域の下端より下に出ている、または上端より上に隠れている場合にスクロール
-      if (cellRect.bottom > visibleBottom || cellRect.top < upperRect.top) {
-        const scrollTarget = calUpper.scrollTop + cellRect.bottom - visibleBottom + 12;
-        calUpper.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
-      }
+      const cellRect = tappedCell.getBoundingClientRect();
+      // cal-upper 内座標でのセル下端位置
+      const cellBottomInUpper = cellRect.bottom - upperRect.top + calUpper.scrollTop;
+      // セルの真下 = パネル上端 になるスクロール位置
+      // cal-upper の clientHeight がパネル開後の表示高さ
+      const targetScrollTop = cellBottomInUpper - calUpper.clientHeight;
+      calUpper.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
     }, delay);
   }
+}
+
+function closeDayDetail() {
+  const panel = document.getElementById('day-detail');
+  if (panel) panel.classList.remove('open');
+  document.querySelectorAll('.cal-cell.selected').forEach(el => el.classList.remove('selected'));
+  selectedDateKey = null;
 }
 
 function openDayDetail(storeKey, dateKey) {
