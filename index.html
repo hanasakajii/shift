@@ -661,8 +661,11 @@ async function switchTab(key) {
   renderCurrentTab();
 }
 
-function renderCurrentTab() {
-  if (currentTab === 'calendar') renderCalendarPage();
+async function renderCurrentTab() {
+  if (currentTab === 'calendar') {
+    await refreshCurrentData();
+    renderCalendarPage();
+  }
   else if (currentTab === 'dashboard') renderDashboard();
   else if (currentTab === 'staff') renderStaffMgmt();
   else if (currentTab === 'submit') renderSubmitPage();
@@ -2145,4 +2148,3 @@ init();
 </script>
 </body>
 </html>
-
