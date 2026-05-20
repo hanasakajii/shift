@@ -1081,8 +1081,9 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
     </div>`;
   }
   if (!isClosed && supOut.length===0 && supIn.length===0 && holidays.length===0) {
-    html += `<div class="day-detail-item day-detail-section-row" style="color:var(--text-sub);">
-      <span style="flex:1;">入力なし</span>
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">応援者</div>
+      <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
       <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
     </div>`;
   }
