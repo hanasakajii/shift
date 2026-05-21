@@ -1959,6 +1959,7 @@ let staffMgmtStore = STORES[0].key;
 let staffMgmtTab = 'list';
 
 function renderStaffMgmt() {
+  newStaffType = 'seishain'; // 画面再生成時にデフォルトに戻す
   const sd = staffData[staffMgmtStore] ?? { staff: [], minStaff: 5 };
   const storeName = STORES.find(s => s.key === staffMgmtStore)?.name ?? '';
 
