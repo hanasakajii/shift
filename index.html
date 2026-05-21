@@ -2077,7 +2077,13 @@ function renderStaffMgmt() {
 
 function selectStaffStore(key) {
   staffMgmtStore = key;
+  const tabsEl = document.querySelector('.store-tabs');
+  const scrollLeft = tabsEl ? tabsEl.scrollLeft : 0;
   renderStaffMgmt();
+  requestAnimationFrame(() => {
+    const newTabsEl = document.querySelector('.store-tabs');
+    if (newTabsEl) newTabsEl.scrollLeft = scrollLeft;
+  });
 }
 
 // ============================================================
