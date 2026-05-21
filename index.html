@@ -36,7 +36,7 @@
   /* ============================================================
      LAYOUT
   ============================================================ */
-  #app { height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+  #app { height: 100dvh; display: flex; flex-direction: column; overflow-x: hidden; }
   #header {
     height: var(--header-h); background: var(--card); border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
@@ -47,7 +47,7 @@
     background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
     padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
   }
-  #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + 12px); }
+  #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 12px); }
   #tab-bar {
     height: var(--tab-h); background: var(--card); border-top: 1px solid var(--border);
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
@@ -139,7 +139,7 @@
   ============================================================ */
   #cal-wrapper {
     display: flex; flex-direction: column;
-    height: calc(100vh - var(--header-h) - var(--tab-h));
+    height: calc(100dvh - var(--header-h) - env(safe-area-inset-top) - var(--tab-h) - env(safe-area-inset-bottom));
     overflow: hidden;
   }
   #cal-upper {
