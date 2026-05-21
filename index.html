@@ -540,8 +540,15 @@ async function init() {
 
 function renderHeader() {
   if (isMaster) {
-    document.getElementById('header-title').textContent = '';
-    document.getElementById('header').style.display = 'none';
+    // カレンダータブのときだけヘッダーに店舗名を表示
+    if (currentTab === 'calendar') {
+      document.getElementById('header').style.display = 'flex';
+      const storeName = masterViewStore?.name ?? '';
+      document.getElementById('header-title').textContent = storeName;
+      document.getElementById('store-badge').textContent = 'マスター';
+    } else {
+      document.getElementById('header').style.display = 'none';
+    }
   } else {
     document.getElementById('header').style.display = 'flex';
     document.getElementById('header-title').textContent = currentStore.name;
@@ -671,10 +678,9 @@ function switchTab(key) {
 }
 
 function renderCurrentTab() {
+  renderHeader(); // タブ切り替え時にヘッダー表示を更新
   if (currentTab === 'calendar') {
-    // まずキャッシュで即描画
     renderCalendarPage();
-    // 裏で最新取得→カレンダーのままなら再描画
     const tabAtStart = currentTab;
     refreshCurrentData().then(() => {
       if (currentTab === tabAtStart) renderCalendarPage();
@@ -738,6 +744,7 @@ function renderCalendarPage() {
 
 async function selectMasterStore(key) {
   masterViewStore = STORES.find(s => s.key === key);
+  renderHeader(); // 店舗切り替え時にヘッダーの店舗名を更新
   const tabsEl = document.querySelector('.store-tabs');
   const scrollLeft = tabsEl ? tabsEl.scrollLeft : 0;
   // 選択店舗の最新データを取得
