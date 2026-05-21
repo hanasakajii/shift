@@ -107,9 +107,10 @@
   .cal-dow:last-child { color: var(--support-in); }
   .cal-cell {
     min-height: 0;
+    overflow: hidden;
     border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
     padding: 5px; cursor: pointer; background: var(--card); transition: background 0.1s;
-    position: relative; overflow: hidden;
+    position: relative;
   }
   .cal-cell:nth-child(7n) { border-right: none; }
   .cal-cell:active { background: var(--accent-light); }
@@ -165,7 +166,8 @@
     min-height: 0;
     display: grid !important;
     grid-template-columns: repeat(7, 1fr);
-    grid-template-rows: repeat(var(--weeks, 6), 1fr);
+    grid-template-rows: repeat(var(--weeks, 6), minmax(0, 1fr));
+    overflow: hidden;
   }
   #day-detail {
     background: var(--card);
