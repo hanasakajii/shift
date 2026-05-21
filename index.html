@@ -106,7 +106,8 @@
   .cal-dow:first-child { color: var(--danger); }
   .cal-dow:last-child { color: var(--support-in); }
   .cal-cell {
-    min-height: 80px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    min-height: 0;
+    border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
     padding: 5px; cursor: pointer; background: var(--card); transition: background 0.1s;
     position: relative; overflow: hidden;
   }
@@ -146,10 +147,25 @@
     overflow: hidden;
   }
   #cal-upper {
-    flex: 1;          /* ★ cal-wrapper の残り高さをすべて受け取る */
-    min-height: 0;    /* ★ flex子要素のoverflow-yが効くために必須 */
-    overflow-y: auto; /* ★ ここがスクロールコンテナ */
+    flex: 1;
+    min-height: 0;
+    overflow-y: hidden;
     transition: flex 0.35s ease-out;
+    display: flex;
+    flex-direction: column;
+  }
+  #cal-upper > div:last-child {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #cal-cells {
+    flex: 1;
+    min-height: 0;
+    display: grid !important;
+    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(var(--weeks, 6), 1fr);
   }
   #day-detail {
     background: var(--card);
@@ -935,6 +951,9 @@ function renderCalCells(store, ym) {
       + '</div>';
   }
   document.getElementById('cal-cells').innerHTML = cells;
+  // 週数をCSS変数にセット（grid 1fr均等割り用）
+  const weeks = Math.ceil((firstDay + lastDate) / 7);
+  document.documentElement.style.setProperty('--weeks', weeks);
 }
 
 // 表示中店舗の当月データを再取得
