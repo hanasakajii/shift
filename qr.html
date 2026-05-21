@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AOBA シフト管理 QRコード一覧</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body { font-family: 'Hiragino Sans', sans-serif; background: #f5f5f3; padding: 16px; }
+  h1 { font-size: 18px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+  p { font-size: 12px; color: #888; text-align: center; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+  .card {
+    background: #fff; border-radius: 12px; padding: 16px;
+    text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .card-name { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+  .card-url { font-size: 10px; color: #888; margin-top: 10px; word-break: break-all; }
+  .master { border: 2px solid #1a1a1a; }
+  .master .card-name { color: #1a1a1a; }
+  @media print {
+    body { background: #fff; }
+    .card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+  }
+</style>
+</head>
+<body>
+<h1>📅 AOBA シフト管理</h1>
+<p>各店舗のQRコードをスキャンしてアクセスしてください</p>
+<div class="grid" id="grid"></div>
+
+<script>
+const BASE = 'https://hanasakajii.github.io/shift/';
+const STORES = [
+  { name: '善導寺', key: 'zendoji' },
+  { name: 'みやき', key: 'miyaki' },
+  { name: '津福', key: 'tsufuku' },
+  { name: '十三部', key: 'jusanbu' },
+  { name: '小森野', key: 'komorino' },
+  { name: '久留米', key: 'kurume' },
+  { name: '築町', key: 'tsukimachi' },
+  { name: '新栄町', key: 'shinsakae' },
+  { name: '四ツ山', key: 'yotsuyama' },
+  { name: '柳川駅前', key: 'ekimae' },
+  { name: '柳川', key: 'yanagawa' },
+  { name: '柳川美容', key: 'biyou' },
+  { name: '八女理容', key: 'yame' },
+  { name: '八女美容', key: 'yame-biyou' },
+  { name: '玉名', key: 'tamana' },
+  { name: 'マスター', key: 'master' },
+];
+
+const grid = document.getElementById('grid');
+
+STORES.forEach(store => {
+  const url = BASE + '#' + store.key;
+  const card = document.createElement('div');
+  card.className = 'card' + (store.key === 'master' ? ' master' : '');
+
+  const name = document.createElement('div');
+  name.className = 'card-name';
+  name.textContent = store.name;
+
+  const qrDiv = document.createElement('div');
+  qrDiv.id = 'qr-' + store.key;
+
+  const urlDiv = document.createElement('div');
+  urlDiv.className = 'card-url';
+  urlDiv.textContent = url;
+
+  card.appendChild(name);
+  card.appendChild(qrDiv);
+  card.appendChild(urlDiv);
+  grid.appendChild(card);
+
+  new QRCode(qrDiv, {
+    text: url,
+    width: 160,
+    height: 160,
+    colorDark: '#1a1a1a',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+});
+</script>
+</body>
+</html>
