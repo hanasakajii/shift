@@ -541,6 +541,28 @@ const STORES = [
 // O(1)アクセス用Map
 const STORE_MAP = Object.fromEntries(STORES.map(s => [s.key, s]));
 
+// 未読バッジ管理
+let lastCheckedSubmit = JSON.parse(localStorage.getItem('lastCheckedSubmit') || '{}');
+
+function getUnreadSubmitCount(ym) {
+  if (!isMaster) return 0;
+  let count = 0;
+  for (const store of STORES) {
+    const submitted = shiftData[store.key]?.[ym]?._submitted;
+    if (submitted && submitted !== lastCheckedSubmit[store.key]) count++;
+  }
+  return count;
+}
+
+function markSubmitsAsRead(ym) {
+  for (const store of STORES) {
+    const submitted = shiftData[store.key]?.[ym]?._submitted;
+    if (submitted) lastCheckedSubmit[store.key] = submitted;
+  }
+  localStorage.setItem('lastCheckedSubmit', JSON.stringify(lastCheckedSubmit));
+  renderTabBar();
+}
+
 // supportsエントリの正規化ヘルパー
 function normalizeSupport(s) {
   // count型でnameが確定済みの場合はname型に変換
@@ -737,8 +759,12 @@ function renderTabBar() {
         || (t.key === 'week' && currentTab === 'calendar' && calViewMode === 'week')
         || (t.key === currentTab && t.key !== 'month' && t.key !== 'week')
       : (t.key === currentTab);
-    return `<button class="tab-item ${isActive ? 'active' : ''}" onclick="switchTab('${t.key}')">
+    const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
+    const badge = (isMaster && t.key === 'dashboard') ? getUnreadSubmitCount(ym) : 0;
+    const badgeHtml = badge > 0 ? `<span style="position:absolute;top:6px;right:calc(50% - 18px);background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;">${badge}</span>` : '';
+    return `<button class="tab-item ${isActive ? 'active' : ''}" onclick="switchTab('${t.key}')" style="position:relative;">
       ${t.icon}
+      ${badgeHtml}
       <span>${t.label}</span>
     </button>`;
   }).join('');
@@ -770,7 +796,7 @@ function renderCurrentTab() {
       if (currentTab === tabAtStart && !panelOpen) renderCalendarPage();
     });
   }
-  else if (currentTab === 'dashboard') { document.getElementById('content').classList.remove('calendar-mode'); renderDashboard(); }
+  else if (currentTab === 'dashboard') { document.getElementById('content').classList.remove('calendar-mode'); renderDashboard(); const ym2 = `${currentYear}-${String(currentMonth).padStart(2,'0')}`; markSubmitsAsRead(ym2); }
   else if (currentTab === 'staff') { document.getElementById('content').classList.remove('calendar-mode'); renderStaffMgmt(); }
   else if (currentTab === 'submit') { document.getElementById('content').classList.remove('calendar-mode'); renderSubmitPage(); }
 }
@@ -2575,7 +2601,8 @@ function submitIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="cur
 // PUSH NOTIFICATIONS
 // ============================================================
 async function initPush() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  // プッシュ非対応環境では何もしない
+  return;
 
   try {
     // Service Worker登録
@@ -2605,7 +2632,7 @@ async function initPush() {
       });
     }
   } catch(e) {
-    showToast('通知エラー: ' + e.message);
+    // 無視
   }
 }
 
