@@ -661,30 +661,30 @@ async function kvSet(key, value) {
 
 async function loadAllData() {
   showLoading();
-  // スタッフデータ読み込み
-  for (const store of STORES) {
-    try {
-      const d = await kvGet(`staff:${store.key}`);
-      if (d && typeof d === 'object' && d.staff) {
-        staffData[store.key] = d;
-      } else {
-        staffData[store.key] = { staff: [], minStaff: 5 };
-      }
-    } catch(e) {
-      staffData[store.key] = { staff: [], minStaff: 5 };
-    }
-  }
-  // シフトデータ読み込み（当月）
   const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
   const storeList = isMaster ? STORES : [currentStore];
-  for (const store of storeList) {
-    const d = await kvGet(`shift:${store.key}:${ym}`);
-    if (!shiftData[store.key]) shiftData[store.key] = {};
-    shiftData[store.key][ym] = (d && typeof d === 'object') ? d : {};
-  }
-  // 更新ログ
-  const log = await kvGet('updateLog');
-  updateLog = Array.isArray(log) ? log : [];
+
+  // スタッフ・シフト・ログを全部並列で取得
+  const staffPromises = STORES.map(store =>
+    kvGet(`staff:${store.key}`).then(d => {
+      staffData[store.key] = (d && typeof d === 'object' && d.staff) ? d : { staff: [], minStaff: 5 };
+    }).catch(() => {
+      staffData[store.key] = { staff: [], minStaff: 5 };
+    })
+  );
+
+  const shiftPromises = storeList.map(store =>
+    kvGet(`shift:${store.key}:${ym}`).then(d => {
+      if (!shiftData[store.key]) shiftData[store.key] = {};
+      shiftData[store.key][ym] = (d && typeof d === 'object') ? d : {};
+    })
+  );
+
+  const logPromise = kvGet('updateLog').then(log => {
+    updateLog = Array.isArray(log) ? log : [];
+  });
+
+  await Promise.all([...staffPromises, ...shiftPromises, logPromise]);
 
   // staffData migration: string形式を{name,type}オブジェクトに統一
   for (const store of STORES) {
