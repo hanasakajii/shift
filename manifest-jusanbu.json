@@ -1,0 +1,20 @@
+{
+  "name": "AOBA 十三部",
+  "short_name": "十三部",
+  "start_url": "/shift/#jusanbu",
+  "display": "standalone",
+  "background_color": "#f5f5f3",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/shift/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/shift/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
