@@ -518,6 +518,7 @@
 // CONFIG
 // ============================================================
 const WORKER_URL = 'https://shift-api.cherry-blossom-pochi.workers.dev';
+const VAPID_PUBLIC_KEY = 'BIGrVssoA9oBHtxiNnc_2Iv7vW65B8M07l4PllJc4tkt_eElpnRgbJwohqiS3aWlw74blJNQfXXzuwUIP_E5m7o';
 
 const STORES = [
   { name: '善導寺', key: 'zendoji', closedDow: [1] },
@@ -606,6 +607,8 @@ async function init() {
   renderCurrentTab();
   // 隣月を裏で先読み
   setTimeout(() => prefetchAdjacentMonths(), 1000);
+  // プッシュ通知初期化
+  setTimeout(() => initPush(), 2000);
 }
 
 function renderHeader() {
@@ -1659,6 +1662,8 @@ async function toggleSubmit() {
   } else {
     data._submitted = new Date().toISOString();
     showToast('提出しました！');
+    // マスターに通知
+    sendPushToStores(['master'], `${currentStore.name}がシフトを提出しました`, `${currentYear}年${currentMonth}月分`);
   }
   await saveShiftData(currentStore.key, ym);
   renderSubmitPage();
@@ -2565,6 +2570,64 @@ function calIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="curren
 function dashIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>`; }
 function staffIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a6 6 0 0 1 6-6h2"/><path d="M19 15l-5 5 2.5-5H13l5-5-2.5 5H19z" stroke-linejoin="round"/></svg>`; }
 function submitIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 19V5m-7 7 7-7 7 7"/></svg>`; }
+
+// ============================================================
+// PUSH NOTIFICATIONS
+// ============================================================
+async function initPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  try {
+    // Service Worker登録
+    const reg = await navigator.serviceWorker.register('/shift/sw.js');
+
+    // 通知許可を取得
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    // 既存の購読確認
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      // 新規購読
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    // 購読情報をWorkerに送信
+    const storeKey = isMaster ? 'master' : currentStore?.key;
+    if (storeKey) {
+      await fetch(`${WORKER_URL}/push/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeKey, subscription: sub.toJSON() })
+      });
+    }
+  } catch(e) {
+    // プッシュ通知非対応環境では無視
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+// 通知送信ヘルパー
+async function sendPushToStores(targets, title, body) {
+  try {
+    await fetch(`${WORKER_URL}/push/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targets, title, body })
+    });
+  } catch(e) { /* 通知失敗は無視 */ }
+}
 
 // ============================================================
 // START
