@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>シフト管理</title>
 <link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="/shift/manifest-master.json" id="manifest-link">
 <meta name="apple-mobile-web-app-title" content="AOBA">
 <style>
   /* ============================================================
@@ -623,6 +624,7 @@ function detectStore() {
 // ============================================================
 async function init() {
   detectStore();
+  updateManifest();
   renderHeader();
   renderTabBar();
   await loadAllData();
@@ -633,7 +635,30 @@ async function init() {
   setTimeout(() => initPush(), 2000);
 }
 
+function updateManifest() {
+  const key = isMaster ? 'master' : currentStore.key;
+  const link = document.getElementById('manifest-link');
+  if (link) link.href = `/shift/manifest-${key}.json`;
+}
+
 function renderHeader() {
+  if (isMaster) {
+    if (currentTab === 'calendar') {
+      document.getElementById('header').style.display = 'flex';
+      const storeName = masterViewStore?.name ?? '';
+      document.getElementById('header-title').textContent = storeName;
+      document.getElementById('store-badge').textContent = 'マスター';
+    } else {
+      document.getElementById('header').style.display = 'none';
+    }
+  } else {
+    document.getElementById('header').style.display = 'flex';
+    document.getElementById('header-title').textContent = currentStore.name;
+    document.getElementById('store-badge').textContent = currentStore.name;
+  }
+}
+
+
 
   // manifest動的切り替え
 const key = isMaster ? 'master' : currentStore?.key;
