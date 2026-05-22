@@ -2605,7 +2605,7 @@ async function initPush() {
       });
     }
   } catch(e) {
-    // プッシュ通知非対応環境では無視
+    showToast('通知エラー: ' + e.message);
   }
 }
 
