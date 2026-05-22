@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>シフト管理</title>
 <link rel="apple-touch-icon" href="icon.png">
+  <link rel="manifest" href="/shift/manifest.json">
 <meta name="apple-mobile-web-app-title" content="AOBA">
 <style>
   /* ============================================================
@@ -2609,7 +2610,6 @@ function submitIcon() { return `<svg viewBox="0 0 24 24" fill="none" stroke="cur
 // ============================================================
 async function initPush() {
   // プッシュ非対応環境では何もしない
-  return;
 
   try {
     // Service Worker登録
