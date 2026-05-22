@@ -636,7 +636,7 @@ async function init() {
 function renderHeader() {
 
   // manifest動的切り替え
-  const key = isMaster ? 'master' : currentStore;
+const key = isMaster ? 'master' : currentStore?.key;
   const manifestHref = `/shift/manifest-${key}.json`;
 
   let link = document.querySelector('link[rel="manifest"]');
