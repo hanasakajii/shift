@@ -107,11 +107,10 @@
   .cal-dow:first-child { color: var(--danger); }
   .cal-dow:last-child { color: var(--support-in); }
   .cal-cell {
-    min-height: 0;
-    overflow: hidden;
+    min-height: 80px;
     border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
     padding: 5px; cursor: pointer; background: var(--card); transition: background 0.1s;
-    position: relative;
+    position: relative; overflow: hidden;
   }
   .cal-cell:nth-child(7n) { border-right: none; }
   .cal-cell:active { background: var(--accent-light); }
@@ -156,6 +155,7 @@
     display: flex;
     flex-direction: column;
   }
+
   #cal-upper > div:last-child {
     flex: 1;
     min-height: 0;
@@ -163,12 +163,8 @@
     flex-direction: column;
   }
   #cal-cells {
-    flex: 1;
-    min-height: 0;
     display: grid !important;
     grid-template-columns: repeat(7, 1fr);
-    grid-template-rows: repeat(var(--weeks, 6), minmax(0, 1fr));
-    overflow: hidden;
   }
   #day-detail {
     background: var(--card);
@@ -1226,19 +1222,19 @@ function showDayDetail(storeKey, dateKey, ismaster) {
     });
   });
 
-  // セルの下端がパネル上端に揃うようスクロール（flex方式）
+  // パネル開後、セル下端がcal-upper下端に揃うようスクロール
   const calUpper = document.getElementById('cal-upper');
-  const tappedCell = document.querySelector('.cal-cell[data-key="' + dateKey + '"]');
-  if (calUpper && tappedCell) {
-    const delay = wasOpen ? 0 : 380;
-    _detailScrollTimer = setTimeout(() => {
+  if (calUpper) {
+    setTimeout(() => {
+      const cell = document.querySelector('.cal-cell[data-key="' + dateKey + '"]');
+      if (!cell) return;
       const upperRect = calUpper.getBoundingClientRect();
-      const cellRect = tappedCell.getBoundingClientRect();
-      const cellBottomInUpper = cellRect.bottom - upperRect.top + calUpper.scrollTop;
-      const targetScrollTop = cellBottomInUpper - calUpper.clientHeight;
-      calUpper.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
-      _detailScrollTimer = null;
-    }, delay);
+      const cellRect = cell.getBoundingClientRect();
+      const diff = cellRect.bottom - upperRect.bottom;
+      if (diff > 0) {
+        calUpper.scrollTo({ top: calUpper.scrollTop + diff, behavior: 'smooth' });
+      }
+    }, wasOpen ? 50 : 420);
   }
 }
 
