@@ -1,0 +1,20 @@
+{
+  "name": "AOBAシフト管理",
+  "short_name": "AOBA",
+  "start_url": "/shift/",
+  "display": "standalone",
+  "background_color": "#f5f5f3",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/shift/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/shift/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
