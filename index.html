@@ -604,6 +604,8 @@ async function init() {
   renderTabBar();
   await loadAllData();
   renderCurrentTab();
+  // 隣月を裏で先読み
+  setTimeout(() => prefetchAdjacentMonths(), 1000);
 }
 
 function renderHeader() {
@@ -1042,6 +1044,26 @@ async function changeMonth(delta) {
     }
   }
   renderCalendarPage();
+  // 表示後に隣月を裏で先読み
+  prefetchAdjacentMonths();
+}
+
+function prefetchAdjacentMonths() {
+  const storeList = isMaster ? STORES : [currentStore];
+  [-1, 1].forEach(d => {
+    let m = currentMonth + d;
+    let y = currentYear;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    const ym = `${y}-${String(m).padStart(2,'0')}`;
+    storeList.forEach(async store => {
+      if (!shiftData[store.key]?.[ym]) {
+        const data = await kvGet(`shift:${store.key}:${ym}`);
+        if (!shiftData[store.key]) shiftData[store.key] = {};
+        shiftData[store.key][ym] = (data && typeof data === 'object') ? data : {};
+      }
+    });
+  });
 }
 
 // ============================================================
