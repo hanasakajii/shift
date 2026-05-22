@@ -51,6 +51,7 @@
     padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
   }
   #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 12px); }
+  #content.calendar-mode { padding-bottom: 0; overflow: hidden; }
   #tab-bar {
     height: var(--tab-h); background: var(--card); border-top: 1px solid var(--border);
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
@@ -144,14 +145,14 @@
   ============================================================ */
   #cal-wrapper {
     display: flex; flex-direction: column;
-    height: calc(100dvh - var(--header-h) - env(safe-area-inset-top) - env(safe-area-inset-top) - var(--tab-h) - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--header-h) - env(safe-area-inset-top) - var(--tab-h) - env(safe-area-inset-bottom));
     overflow: hidden;
   }
   #cal-upper {
     flex: 1;
     min-height: 0;
-    overflow-y: hidden;
-    transition: flex 0.35s ease-out;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
   }
@@ -179,6 +180,7 @@
   #day-detail.open {
     flex: 0 0 45%;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   #day-detail-content {
     transition: opacity 0.15s ease-out;
@@ -418,6 +420,36 @@
   .store-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   /* ============================================================
+     CUSTOM CONFIRM MODAL
+  ============================================================ */
+  #custom-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 900;
+    display: none; align-items: center; justify-content: center; padding: 24px;
+  }
+  #custom-modal-overlay.open { display: flex; }
+  #custom-modal {
+    background: var(--card); border-radius: var(--radius); width: 100%; max-width: 320px;
+    overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.2);
+  }
+  #custom-modal-title {
+    font-size: 16px; font-weight: 700; padding: 20px 20px 8px; text-align: center;
+  }
+  #custom-modal-message {
+    font-size: 14px; color: var(--text-sub); padding: 0 20px 20px; text-align: center; line-height: 1.5;
+  }
+  .custom-modal-buttons {
+    display: flex; border-top: 1px solid var(--border);
+  }
+  .custom-modal-btn {
+    flex: 1; padding: 14px; font-size: 16px; font-weight: 600;
+    border: none; background: none; cursor: pointer; font-family: inherit;
+  }
+  .custom-modal-btn + .custom-modal-btn { border-left: 1px solid var(--border); }
+  .custom-modal-btn.danger { color: var(--danger); }
+  .custom-modal-btn.primary { color: var(--accent); }
+  .custom-modal-btn.cancel { color: var(--text-sub); }
+
+  /* ============================================================
      SETTINGS / MODAL
   ============================================================ */
   .modal-overlay {
@@ -473,6 +505,15 @@
   </div>
 </div>
 
+<!-- Custom Confirm Modal -->
+<div id="custom-modal-overlay">
+  <div id="custom-modal">
+    <div id="custom-modal-title"></div>
+    <div id="custom-modal-message"></div>
+    <div class="custom-modal-buttons" id="custom-modal-buttons"></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -499,6 +540,16 @@ const STORES = [
   { name: '八女美容', key: 'yame-biyou', closedDow: [] },
   { name: '玉名', key: 'tamana', closedDow: [] },
 ]; // closedDow: 0=日,1=月,2=火,3=水,4=木,5=金,6=土
+
+// O(1)アクセス用Map
+const STORE_MAP = Object.fromEntries(STORES.map(s => [s.key, s]));
+
+// supportsエントリの正規化ヘルパー
+function normalizeSupport(s) {
+  // count型でnameが確定済みの場合はname型に変換
+  if (s.type === 'count' && s.name) return { ...s, type: 'name' };
+  return s;
+}
 
 const AREAS = [
   { name: '全店', keys: null },
@@ -537,7 +588,7 @@ function detectStore() {
     isMaster = true;
     currentStore = null;
   } else {
-    const found = STORES.find(s => s.key === hash);
+    const found = STORE_MAP[hash];
     if (found) {
       isMaster = false;
       currentStore = found;
@@ -583,7 +634,8 @@ function renderHeader() {
 async function kvGet(key) {
   try {
     const res = await fetch(`${WORKER_URL}?key=${encodeURIComponent(key)}`);
-    if (!res.ok) { console.error('kvGet !ok', key, res.status); return null; }
+    if (!res.ok) {
+ return null; }
     const wrapper = await res.json();
     const val = wrapper.data ?? null;
     if (val === null) return null;
@@ -591,7 +643,8 @@ async function kvGet(key) {
       try { return JSON.parse(val); } catch { return val; }
     }
     return val;
-  } catch(e) { console.error('kvGet error', key, e.message); return null; }
+  } catch(e) {
+ return null; }
 }
 
 async function kvSet(key, value) {
@@ -599,11 +652,11 @@ async function kvSet(key, value) {
     const strValue = typeof value === 'string' ? value : JSON.stringify(value);
     const url = `${WORKER_URL}?key=${encodeURIComponent(key)}&value=${encodeURIComponent(strValue)}`;
     const res = await fetch(url);
-    if (!res.ok) { console.error('kvSet !ok', key, res.status); return false; }
+    if (!res.ok) {
+ return false; }
     const data = await res.json();
     return data.ok === true;
   } catch(e) {
-    console.error('kvSet error', key, e.message);
     return false;
   }
 }
@@ -614,14 +667,12 @@ async function loadAllData() {
   for (const store of STORES) {
     try {
       const d = await kvGet(`staff:${store.key}`);
-      console.log('staff:' + store.key, typeof d, JSON.stringify(d));
       if (d && typeof d === 'object' && d.staff) {
         staffData[store.key] = d;
       } else {
         staffData[store.key] = { staff: [], minStaff: 5 };
       }
     } catch(e) {
-      console.error('staff load error:', store.key, e);
       staffData[store.key] = { staff: [], minStaff: 5 };
     }
   }
@@ -636,6 +687,14 @@ async function loadAllData() {
   // 更新ログ
   const log = await kvGet('updateLog');
   updateLog = Array.isArray(log) ? log : [];
+
+  // staffData migration: string形式を{name,type}オブジェクトに統一
+  for (const store of STORES) {
+    if (!staffData[store.key]) continue;
+    staffData[store.key].staff = (staffData[store.key].staff ?? []).map(s =>
+      typeof s === 'string' ? { name: s, type: 'seishain' } : s
+    );
+  }
 }
 
 async function saveShiftData(storeKey, ym) {
@@ -649,7 +708,7 @@ async function saveStaffData(storeKey) {
 }
 
 async function appendLog(storeKey, text) {
-  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
+  const storeName = STORE_MAP[storeKey]?.name??storeKey;
   updateLog.unshift({ store: storeName, storeKey, time: new Date().toISOString(), text });
   if (updateLog.length > 100) updateLog = updateLog.slice(0, 100);
   await kvSet('updateLog', JSON.stringify(updateLog));
@@ -704,18 +763,22 @@ function renderCurrentTab() {
     renderCalendarPage();
     const tabAtStart = currentTab;
     refreshCurrentData().then(() => {
-      if (currentTab === tabAtStart) renderCalendarPage();
+      // パネルが開いている間は再描画しない（selectedDateKeyが上書きされるのを防ぐ）
+      const panel = document.getElementById('day-detail');
+      const panelOpen = panel && panel.classList.contains('open');
+      if (currentTab === tabAtStart && !panelOpen) renderCalendarPage();
     });
   }
-  else if (currentTab === 'dashboard') renderDashboard();
-  else if (currentTab === 'staff') renderStaffMgmt();
-  else if (currentTab === 'submit') renderSubmitPage();
+  else if (currentTab === 'dashboard') { document.getElementById('content').classList.remove('calendar-mode'); renderDashboard(); }
+  else if (currentTab === 'staff') { document.getElementById('content').classList.remove('calendar-mode'); renderStaffMgmt(); }
+  else if (currentTab === 'submit') { document.getElementById('content').classList.remove('calendar-mode'); renderSubmitPage(); }
 }
 
 // ============================================================
 // CALENDAR PAGE
 // ============================================================
-function renderCalendarPage() {
+async function renderCalendarPage() {
+  document.getElementById('content').classList.add('calendar-mode');
   const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
   let storeSelector = '';
   if (isMaster) {
@@ -757,14 +820,14 @@ function renderCalendarPage() {
     </div>
   `;
   if (calViewMode === 'week') {
-    renderCalCellsWeek(viewStore, ym);
+    await renderCalCellsWeek(viewStore, ym);
   } else {
     renderCalCells(viewStore, ym);
   }
 }
 
 async function selectMasterStore(key) {
-  masterViewStore = STORES.find(s => s.key === key);
+  masterViewStore = STORE_MAP[key];
   renderHeader(); // 店舗切り替え時にヘッダーの店舗名を更新
   const tabsEl = document.querySelector('.store-tabs');
   const scrollLeft = tabsEl ? tabsEl.scrollLeft : 0;
@@ -871,12 +934,12 @@ async function renderCalCellsWeek(store, ym) {
       ...(isClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
       ...holidays.map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...supports.filter(s => s.from === store.key).map(s => {
-        const toName = STORES.find(x => x.key === s.to)?.name ?? s.to;
+        const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
         return `<span class="cal-tag tag-out">${label}</span>`;
       }),
       ...supports.filter(s => s.to === store.key).map(s => {
-        const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
+        const fromName = STORE_MAP[s.from]?.name??s.from;
         const label = s.type === 'count' ? `${fromName}→${s.count}名` : `${s.name}(${fromName})`;
         return `<span class="cal-tag tag-in">${label}</span>`;
       }),
@@ -885,7 +948,7 @@ async function renderCalCellsWeek(store, ym) {
     const countHtml = (allStaff.length > 0 && !isClosed)
       ? `<div class="cal-count ${countClass}" style="position:static;margin-top:4px;display:block;">${countLabel}</div>` : '';
 
-    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="aspect-ratio:1/1.2;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
       + '<div class="cal-date">' + d + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
       + countHtml
@@ -935,12 +998,12 @@ function renderCalCells(store, ym) {
       ...(isCalClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
       ...(dayData.holidays ?? []).slice(0,2).map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...(dayData.supports ?? []).filter(s => s.from === store.key).slice(0,1).map(s => {
-        const toName = STORES.find(x => x.key === s.to)?.name ?? s.to;
+        const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
         return `<span class="cal-tag tag-out">${label}</span>`;
       }),
       ...(dayData.supports ?? []).filter(s => s.to === store.key).slice(0,1).map(s => {
-        const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
+        const fromName = STORE_MAP[s.from]?.name??s.from;
         const label = s.type === 'count' ? `${fromName}→${s.count}名` : `${s.name}(${fromName})`;
         return `<span class="cal-tag tag-in">${label}</span>`;
       }),
@@ -1007,7 +1070,7 @@ function openSheet(storeKey, dateKey) {
   sheetDate = { storeKey, dateKey, ym };
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
-    supports: JSON.parse(JSON.stringify(dayData.supports ?? []))
+    supports: structuredClone(dayData.supports ?? [])
   };
 
   const [y, m, d] = dateKey.split('-');
@@ -1032,10 +1095,10 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const supOut = supports.filter(s => s.from === storeKey);
   const supIn = supports.filter(s => s.to === storeKey);
   const storeSettings = staffData[storeKey] ?? {};
-  const calClosedDow = storeSettings.closedDow ?? (STORES.find(s=>s.key===storeKey)?.closedDow ?? []);
+  const calClosedDow = storeSettings.closedDow ?? (STORE_MAP[storeKey]?.closedDow ?? []);
   const calSpecialClosed = storeSettings.specialClosedDates ?? [];
   const isClosed = calClosedDow.includes(new Date(+y,+m-1,+d).getDay()) || calSpecialClosed.includes(dateKey);
-  const storeName = ismaster ? (STORES.find(s=>s.key===storeKey)?.name??storeKey)+' ' : '';
+  const storeName = ismaster ? (STORE_MAP[storeKey]?.name??storeKey)+' ' : '';
   const editFn = ismaster ? `openMasterSheet('${storeKey}','${dateKey}')` : `openFullSheet('${storeKey}','${dateKey}')`;
   const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
 
@@ -1048,7 +1111,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   if (pendingRequests.length > 0) {
     html += `<div class="day-detail-item"><div class="day-detail-label">応援要請</div>`;
     pendingRequests.forEach(sup => {
-      const toName = STORES.find(s=>s.key===sup.to)?.name??sup.to;
+      const toName = STORE_MAP[sup.to]?.name??sup.to;
       html += `<div style="background:#fff3e0;border-radius:6px;padding:6px 10px;margin-top:4px;font-size:13px;color:var(--warning);font-weight:600;">📢 ${toName}へ${sup.count}名</div>`;
     });
     html += `</div>`;
@@ -1086,7 +1149,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   // 応援（出）セクション: スワイプ削除対応
   if (supOut.length > 0) {
     supOut.forEach((s, i) => {
-      const toName = STORES.find(x=>x.key===s.to)?.name??s.to;
+      const toName = STORE_MAP[s.to]?.name??s.to;
       const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
       const delFn = ismaster
         ? `deleteSupportFromDetail('${storeKey}','${dateKey}',${i},true)`
@@ -1107,7 +1170,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       <div class="day-detail-label" style="margin-bottom:0;">応援（入）</div>
       <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
         ${supIn.map(s=>{
-          const fromName = STORES.find(x=>x.key===s.from)?.name??s.from;
+          const fromName = STORE_MAP[s.from]?.name??s.from;
           const label = s.type==='count'?`${fromName}から${s.count}名`:`${s.name}（${fromName}から）`;
           return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>`;
         }).join('')}
@@ -1163,19 +1226,15 @@ function showDayDetail(storeKey, dateKey, ismaster) {
     });
   });
 
-  // ★ タップした日付セルの真下にパネル上端がくるようスクロール
+  // セルの下端がパネル上端に揃うようスクロール（flex方式）
   const calUpper = document.getElementById('cal-upper');
   const tappedCell = document.querySelector('.cal-cell[data-key="' + dateKey + '"]');
   if (calUpper && tappedCell) {
-    // パネルが開ききった後（0.35s）に計算する
     const delay = wasOpen ? 0 : 380;
     _detailScrollTimer = setTimeout(() => {
       const upperRect = calUpper.getBoundingClientRect();
       const cellRect = tappedCell.getBoundingClientRect();
-      // cal-upper 内座標でのセル下端位置
       const cellBottomInUpper = cellRect.bottom - upperRect.top + calUpper.scrollTop;
-      // セルの真下 = パネル上端 になるスクロール位置
-      // cal-upper の clientHeight がパネル開後の表示高さ
       const targetScrollTop = cellBottomInUpper - calUpper.clientHeight;
       calUpper.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
       _detailScrollTimer = null;
@@ -1219,12 +1278,13 @@ function swipeEnd(el, e) {
   }
 }
 
-// パネル外タップでスワイプを閉じる
-document.addEventListener('touchstart', function(e) {
+// パネル外タップでスワイプを閉じる（名前付き関数で保守性確保）
+const _closeSwipeOnOutside = (e) => {
   if (!e.target.closest('.swipe-row')) {
     document.querySelectorAll('.swipe-row.swiped').forEach(r => r.classList.remove('swiped'));
   }
-});
+};
+document.addEventListener('touchstart', _closeSwipeOnOutside);
 
 async function deleteHolidayFromDetail(storeKey, dateKey, name) {
   const ym = dateKey.slice(0,7);
@@ -1284,7 +1344,7 @@ function openFullSheet(storeKey, dateKey) {
   sheetDate = { storeKey, dateKey, ym };
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
-    supports: JSON.parse(JSON.stringify(dayData.supports ?? []))
+    supports: structuredClone(dayData.supports ?? [])
   };
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
@@ -1306,7 +1366,7 @@ function renderSheetBody() {
   const staffNames = staff.map(s => typeof s === 'string' ? s : s.name);
   const holidayChips = staffNames.map(name => {
     const sel = sheetDraft.holidays.includes(name);
-    return `<button class="name-chip ${sel ? 'selected-holiday' : ''}" onclick="toggleHoliday('${name}')">${name}</button>`;
+    return `<button class="name-chip ${sel ? 'selected-holiday' : ''}" data-action="holiday" data-name="${name.replace(/"/g,'&quot;')}">${name}</button>`;
   }).join('');
 
   // 応援（出）チップ — 公休でない人
@@ -1315,7 +1375,7 @@ function renderSheetBody() {
   const selectedOut = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && s.name).map(s => s.name);
   const outChips = outCandidates.map(name => {
     const sel = selectedOut.includes(name);
-    return `<button class="name-chip ${sel ? 'selected-out' : ''}" onclick="toggleSupportOut('${name}')">${name}</button>`;
+    return `<button class="name-chip ${sel ? 'selected-out' : ''}" data-action="support-out" data-name="${name.replace(/"/g,'&quot;')}">${name}</button>`;
   }).join('');
 
   // 応援（出）詳細（pending中のcount型＝名前未確定は除外）
@@ -1337,7 +1397,7 @@ function renderSheetBody() {
   const inList = sheetDraft.supports.filter(s => s.to === sheetDate.storeKey);
   const inDisplay = inList.length > 0
     ? inList.map(s => {
-        const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
+        const fromName = STORE_MAP[s.from]?.name??s.from;
         const label = s.type === 'count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
         return `<span class="cal-tag tag-in" style="font-size:13px;padding:6px 12px;border-radius:20px;display:inline-block;margin:4px 4px 0 0;">${label}</span>`;
       }).join('')
@@ -1347,7 +1407,7 @@ function renderSheetBody() {
   const pendingRequests = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && s.type === 'count' && !s.name);
   const pendingHtml = pendingRequests.length > 0
     ? pendingRequests.map((sup, i) => {
-        const toName = STORES.find(x => x.key === sup.to)?.name ?? sup.to;
+        const toName = STORE_MAP[sup.to]?.name ?? sup.to;
         const globalIdx = sheetDraft.supports.indexOf(sup);
         return `
           <div style="background:#fff3e0;border:1.5px solid #ffe082;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
@@ -1355,14 +1415,18 @@ function renderSheetBody() {
             <div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">誰が行くか選んでください：</div>
             <div class="name-chips">
               ${outCandidates.map(n =>
-                `<button class="name-chip ${sup.name===n?'selected-out':''}" onclick="selectPendingStaff(${globalIdx},'${n}')">${n}</button>`
+                `<button class="name-chip ${sup.name===n?'selected-out':''}" data-action="pending" data-idx="${globalIdx}" data-name="${n.replace(/"/g,'&quot;')}">${n}</button>`
               ).join('')}
             </div>
           </div>`;
       }).join('')
     : '';
 
-  document.getElementById('sheet-body').innerHTML = `
+  // 古いイベントリスナーを完全削除してから再生成
+  const oldSheetBody = document.getElementById('sheet-body');
+  const sheetBody = oldSheetBody.cloneNode(false);
+  oldSheetBody.replaceWith(sheetBody);
+  sheetBody.innerHTML = `
     ${pendingHtml ? `<div class="sheet-section-label">応援要請（マスターから）</div>${pendingHtml}` : ''}
     <div class="sheet-section-label">公休</div>
     <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
@@ -1374,6 +1438,17 @@ function renderSheetBody() {
     <div class="sheet-section-label">応援（入）</div>
     <div>${inDisplay}</div>
   `;
+
+  // イベント委譲: data-action でハンドリング
+  sheetBody.onclick = (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const name = btn.dataset.name;
+    if (action === 'holiday') toggleHoliday(name);
+    else if (action === 'support-out') toggleSupportOut(name);
+    else if (action === 'pending') selectPendingStaff(parseInt(btn.dataset.idx), name);
+  };
 }
 
 function toggleHoliday(name) {
@@ -1444,9 +1519,8 @@ async function saveSheet() {
     return s;
   });
 
-  // 削除された応援（出）を相手店から削除
-  for (const old of oldSupportsOut) {
-    if (!old.to) continue;
+  // 削除された応援（出）を相手店から削除 + 新しい応援を追加（並列処理）
+  const deleteOps = oldSupportsOut.filter(o => o.to).map(async (old) => {
     const targetYm = ym;
     if (!shiftData[old.to]) shiftData[old.to] = {};
     if (!shiftData[old.to][targetYm]) {
@@ -1454,41 +1528,52 @@ async function saveSheet() {
       shiftData[old.to][targetYm] = (d && typeof d === 'object') ? d : {};
     }
     const tData = shiftData[old.to][targetYm][dateKey] ?? { holidays: [], supports: [] };
-    // name指定かcount指定かに関わらず同じfrom・toの応援エントリを削除
     tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.to === old.to && (s.name === old.name || old.type === 'count')));
     shiftData[old.to][targetYm][dateKey] = tData;
-    await saveShiftData(old.to, targetYm);
-  }
+    return saveShiftData(old.to, targetYm);
+  });
+  await Promise.all(deleteOps);
 
-  // 新しい応援（出）を相手店に追加
-  for (const sup of newSupportsOut) {
-    if (!sup.to) continue;
+  const addOps = newSupportsOut.filter(s => s.to).map(async (sup) => {
     if (!shiftData[sup.to]) shiftData[sup.to] = {};
     if (!shiftData[sup.to][ym]) {
       const d = await kvGet(`shift:${sup.to}:${ym}`);
       shiftData[sup.to][ym] = (d && typeof d === 'object') ? d : {};
     }
     const tData = shiftData[sup.to][ym][dateKey] ?? { holidays: [], supports: [] };
-    // 同じfrom・toの既存エントリ（count型含む）を先に削除してからpush
     tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.to === sup.to));
     tData.supports.push(sup);
     shiftData[sup.to][ym][dateKey] = tData;
-    await saveShiftData(sup.to, ym);
-  }
+    return saveShiftData(sup.to, ym);
+  });
+  await Promise.all(addOps);
 
-  // name確定済みのcount型エントリを強制的にname型に変換してから保存
-  // name未確定のcount型（pendingのまま保存）はそのまま残す、確定済みはname型に変換
+  // name確定済みのcount型エントリを強制的にname型に変換
   const normalizedSupports = sheetDraft.supports.filter(s => s.from === storeKey).map(s => {
     if (s.type === 'count' && s.name) return { ...s, type: 'name' };
     return s;
   });
 
-  // 自店データ保存
+  // 競合対策: KVから最新データを取得してからmerge保存
+  const latestMonth = await kvGet(`shift:${storeKey}:${ym}`);
+  if (latestMonth && typeof latestMonth === 'object') {
+    // KVの最新を先にキャッシュに反映（自分の変更対象日以外）
+    for (const [k, v] of Object.entries(latestMonth)) {
+      if (k !== dateKey && k !== '_submitted') {
+        shiftData[storeKey][ym][k] = v;
+      }
+    }
+    // _submittedはKV側を優先
+    if (latestMonth._submitted) shiftData[storeKey][ym]._submitted = latestMonth._submitted;
+  }
+
+  // 自店データをmerge（応援（入）はKV最新を優先）
+  const latestSupIn = (latestMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey);
   shiftData[storeKey][ym][dateKey] = {
     holidays: sheetDraft.holidays,
     supports: [
       ...normalizedSupports,
-      ...(shiftData[storeKey][ym][dateKey]?.supports ?? []).filter(s => s.to === storeKey)
+      ...latestSupIn
     ]
   };
   const saved = await saveShiftData(storeKey, ym);
@@ -1749,12 +1834,12 @@ async function openMasterSheet(storeKey, dateKey) {
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
   masterSheetDate = { storeKey, dateKey, ym };
   masterSheetDraft = {
-    supports: JSON.parse(JSON.stringify(dayData.supports ?? []))
+    supports: structuredClone(dayData.supports ?? [])
   };
 
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
-  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
+  const storeName = STORE_MAP[storeKey]?.name??storeKey;
   document.getElementById('sheet-title').textContent = `${storeName} ${+m}月${+d}日（${dow}）`;
   document.getElementById('sheet-subtitle').textContent = 'マスター応援設定';
   renderMasterSheetBody();
@@ -1768,7 +1853,7 @@ async function openMasterSheet(storeKey, dateKey) {
 
 function renderMasterSheetBody() {
   const { storeKey, dateKey, ym } = masterSheetDate;
-  const storeName = STORES.find(s => s.key === storeKey)?.name ?? storeKey;
+  const storeName = STORE_MAP[storeKey]?.name??storeKey;
   const otherStores = STORES.filter(s => s.key !== storeKey);
   const sd = staffData[storeKey] ?? { staff: [] };
   const staffNames = (sd.staff ?? []).map(s => typeof s === 'string' ? s : s.name);
@@ -1781,7 +1866,7 @@ function renderMasterSheetBody() {
   const supportsOut = masterSheetDraft.supports.filter(s => s.from === storeKey);
 
   const supportItems = supportsOut.map((sup, i) => {
-    const toName = STORES.find(s => s.key === sup.to)?.name ?? '';
+    const toName = STORE_MAP[sup.to]?.name ?? '';
     if (sup.type === 'count') {
       return `
         <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
@@ -1834,7 +1919,7 @@ function renderMasterSheetBody() {
   const supIn = masterSheetDraft.supports.filter(s => s.to === storeKey);
   const supInDisplay = supIn.length > 0
     ? supIn.map(s => {
-        const fromName = STORES.find(x => x.key === s.from)?.name ?? s.from;
+        const fromName = STORE_MAP[s.from]?.name??s.from;
         const label = s.type === 'count' ? `${fromName}から${s.count}名` : `${s.name}（${fromName}から）`;
         return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${label}</span>`;
       }).join('')
@@ -1899,7 +1984,7 @@ function setMasterSupportCount(idx, count) {
 }
 
 async function deleteMasterDayData() {
-  if (!confirm('この日のデータをすべて削除しますか？')) return;
+  if (!await customConfirm('この日のデータをすべて削除しますか？', { title: 'データ削除', okLabel: '削除', okClass: 'danger' })) return;
   const { storeKey, dateKey, ym } = masterSheetDate;
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
 
@@ -1933,9 +2018,8 @@ async function saveMasterSheet() {
   const oldSupports = shiftData[storeKey][ym][dateKey]?.supports ?? [];
   const oldOut = oldSupports.filter(s => s.from === storeKey);
 
-  // 相手店の応援（入）データを更新
-  for (const old of oldOut) {
-    if (!old.to) continue;
+  // 旧応援を相手店から削除（並列）
+  await Promise.all(oldOut.filter(o => o.to).map(async (old) => {
     if (!shiftData[old.to]) shiftData[old.to] = {};
     if (!shiftData[old.to][ym]) {
       const d = await kvGet(`shift:${old.to}:${ym}`);
@@ -1943,12 +2027,11 @@ async function saveMasterSheet() {
     }
     if (!shiftData[old.to][ym][dateKey]) shiftData[old.to][ym][dateKey] = { holidays: [], supports: [] };
     shiftData[old.to][ym][dateKey].supports = (shiftData[old.to][ym][dateKey].supports ?? []).filter(s => !(s.from === storeKey));
-    await saveShiftData(old.to, ym);
-  }
+    return saveShiftData(old.to, ym);
+  }));
 
-  // 新しい応援を相手店に登録
-  for (const sup of masterSheetDraft.supports.filter(s => s.from === storeKey)) {
-    if (!sup.to) continue;
+  // 新応援を相手店に登録（並列）
+  await Promise.all(masterSheetDraft.supports.filter(s => s.from === storeKey && s.to).map(async (sup) => {
     if (!shiftData[sup.to]) shiftData[sup.to] = {};
     if (!shiftData[sup.to][ym]) {
       const d = await kvGet(`shift:${sup.to}:${ym}`);
@@ -1957,15 +2040,29 @@ async function saveMasterSheet() {
     if (!shiftData[sup.to][ym][dateKey]) shiftData[sup.to][ym][dateKey] = { holidays: [], supports: [] };
     shiftData[sup.to][ym][dateKey].supports = (shiftData[sup.to][ym][dateKey].supports ?? []).filter(s => s.from !== storeKey);
     shiftData[sup.to][ym][dateKey].supports.push(sup);
-    await saveShiftData(sup.to, ym);
+    return saveShiftData(sup.to, ym);
+  }));
+
+  // 競合対策: KVから最新を取得してmerge
+  const latestMasterMonth = await kvGet(`shift:${storeKey}:${ym}`);
+  if (latestMasterMonth && typeof latestMasterMonth === 'object') {
+    for (const [k, v] of Object.entries(latestMasterMonth)) {
+      if (k !== dateKey && k !== '_submitted') {
+        shiftData[storeKey][ym][k] = v;
+      }
+    }
+    if (latestMasterMonth._submitted) shiftData[storeKey][ym]._submitted = latestMasterMonth._submitted;
   }
 
-  // 自店データ更新
+  // 自店データ更新（応援（入）はKV最新を優先）
+  const latestMasterSupIn = (latestMasterMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey);
+  const latestMasterHolidays = latestMasterMonth?.[dateKey]?.holidays ?? shiftData[storeKey][ym][dateKey]?.holidays ?? [];
   if (!shiftData[storeKey][ym][dateKey]) shiftData[storeKey][ym][dateKey] = { holidays: [], supports: [] };
   shiftData[storeKey][ym][dateKey].supports = [
     ...masterSheetDraft.supports.filter(s => s.from === storeKey),
-    ...(shiftData[storeKey][ym][dateKey].supports ?? []).filter(s => s.to === storeKey)
+    ...latestMasterSupIn
   ];
+  shiftData[storeKey][ym][dateKey].holidays = latestMasterHolidays;
   await saveShiftData(storeKey, ym);
 
   closeSheet();
@@ -1990,7 +2087,7 @@ let staffMgmtTab = 'list';
 function renderStaffMgmt() {
   newStaffType = 'seishain'; // 画面再生成時にデフォルトに戻す
   const sd = staffData[staffMgmtStore] ?? { staff: [], minStaff: 5 };
-  const storeName = STORES.find(s => s.key === staffMgmtStore)?.name ?? '';
+  const storeName = STORE_MAP[staffMgmtStore]?.name ?? '';
 
   const storeTabs = STORES.map(s =>
     `<button class="store-tab ${staffMgmtStore === s.key ? 'active' : ''}" onclick="selectStaffStore('${s.key}')">${s.name}</button>`
@@ -2059,7 +2156,7 @@ function renderStaffMgmt() {
             <div class="name-chips" style="margin-bottom:12px;">
               ${(function(){
                 const dow7 = ['日','月','火','水','木','金','土'];
-                const closedDow = sd.closedDow ?? (STORES.find(s=>s.key===staffMgmtStore)?.closedDow ?? []);
+                const closedDow = sd.closedDow ?? (STORE_MAP[staffMgmtStore]?.closedDow ?? []);
                 return dow7.map((label,i) => {
                   const sel = closedDow.includes(i);
                   return '<button class="name-chip ' + (sel ? 'selected-holiday' : '') + '" onclick="toggleClosedDow(' + i + ')" id="dow-' + i + '">' + label + '</button>';
@@ -2232,11 +2329,17 @@ async function reorderStaff(fromIdx, toIdx) {
 }
 
 async function resetShiftData() {
-  if (!confirm('シフトデータをすべて削除しますか？\nスタッフ設定は残ります。')) return;
+  if (!await customConfirm('スタッフ設定は残ります。', { title: 'シフトデータをリセット', okLabel: 'リセット', okClass: 'danger' })) return;
   const logEl = document.getElementById('reset-log');
   logEl.style.display = 'block';
   logEl.textContent = '削除中...';
-  const months = ['2026-04','2026-05','2026-06','2026-07','2026-08'];
+  // 前月から12ヶ月分を動的生成
+  const now = new Date();
+  const months = [];
+  for (let i = -1; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
   let count = 0;
   for (const store of STORES) {
     for (const ym of months) {
@@ -2254,12 +2357,17 @@ async function resetShiftData() {
 }
 
 async function resetAllData() {
-  if (!confirm('スタッフ設定を含む全データを削除しますか？\nこの操作は取り消せません。')) return;
-  if (!confirm('本当によろしいですか？')) return;
+  if (!await customConfirm('スタッフ設定を含む全データを削除します。この操作は取り消せません。', { title: '全データリセット', okLabel: '削除する', okClass: 'danger' })) return;
   const logEl = document.getElementById('reset-log');
   logEl.style.display = 'block';
   logEl.textContent = '削除中...';
-  const months = ['2026-04','2026-05','2026-06','2026-07','2026-08'];
+  // 前月から12ヶ月分を動的生成
+  const now = new Date();
+  const months = [];
+  for (let i = -1; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
   for (const store of STORES) {
     for (const ym of months) {
       await kvSet(`shift:${store.key}:${ym}`, JSON.stringify({}));
@@ -2302,7 +2410,7 @@ async function addStaff() {
 }
 
 async function removeStaff(name) {
-  if (!confirm(`${name}を削除しますか？`)) return;
+  if (!await customConfirm(`${name}を削除しますか？`, { title: 'スタッフ削除', okLabel: '削除', okClass: 'danger' })) return;
   staffData[staffMgmtStore].staff = staffData[staffMgmtStore].staff.filter(s => (typeof s === 'string' ? s : s.name) !== name);
   await saveStaffData(staffMgmtStore);
   showToast(`${name}を削除しました`);
@@ -2329,7 +2437,7 @@ function toggleAccordion(id) {
 
 function toggleClosedDow(dow) {
   if (!staffData[staffMgmtStore]) staffData[staffMgmtStore] = { staff: [], minStaff: 5 };
-  const defaultDow = STORES.find(s => s.key === staffMgmtStore)?.closedDow ?? [];
+  const defaultDow = STORE_MAP[staffMgmtStore]?.closedDow ?? [];
   if (!staffData[staffMgmtStore].closedDow) staffData[staffMgmtStore].closedDow = [...defaultDow];
   const idx = staffData[staffMgmtStore].closedDow.indexOf(dow);
   if (idx >= 0) staffData[staffMgmtStore].closedDow.splice(idx, 1);
@@ -2388,7 +2496,7 @@ async function executeMove(name) {
   if (!alreadyExists) staffData[destKey].staff.push(movingStaff);
   await saveStaffData(staffMgmtStore);
   await saveStaffData(destKey);
-  const destName = STORES.find(s => s.key === destKey)?.name ?? destKey;
+  const destName = STORE_MAP[destKey]?.name??destKey;
   document.getElementById('move-modal').remove();
   showToast(`${name}を${destName}に移動しました`);
   renderStaffMgmt();
@@ -2397,6 +2505,28 @@ async function executeMove(name) {
 // ============================================================
 // UTILS
 // ============================================================
+
+// confirm()の代替カスタムモーダル
+function customConfirm(message, { title = '確認', okLabel = 'OK', okClass = 'primary', cancelLabel = 'キャンセル' } = {}) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('custom-modal-overlay');
+    document.getElementById('custom-modal-title').textContent = title;
+    document.getElementById('custom-modal-message').textContent = message;
+    document.getElementById('custom-modal-buttons').innerHTML = `
+      <button class="custom-modal-btn cancel" id="modal-cancel">${cancelLabel}</button>
+      <button class="custom-modal-btn ${okClass}" id="modal-ok">${okLabel}</button>
+    `;
+    overlay.classList.add('open');
+    const close = (result) => {
+      overlay.classList.remove('open');
+      resolve(result);
+    };
+    document.getElementById('modal-ok').onclick = () => close(true);
+    document.getElementById('modal-cancel').onclick = () => close(false);
+    overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+  });
+}
+
 function showLoading() {
   document.getElementById('content').innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
 }
