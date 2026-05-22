@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>シフト管理</title>
 <link rel="apple-touch-icon" href="icon.png">
-  <link rel="manifest" href="/shift/manifest.json">
 <meta name="apple-mobile-web-app-title" content="AOBA">
 <style>
   /* ============================================================
@@ -635,7 +634,22 @@ async function init() {
 }
 
 function renderHeader() {
-  if (isMaster) {
+
+  // manifest動的切り替え
+  const key = isMaster ? 'master' : currentStore;
+  const manifestHref = `/shift/manifest-${key}.json`;
+
+  let link = document.querySelector('link[rel="manifest"]');
+
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'manifest';
+    document.head.appendChild(link);
+  }
+
+  link.href = manifestHref;
+
+  // ↓ここから既存コード
     // カレンダータブのときだけヘッダーに店舗名を表示
     if (currentTab === 'calendar') {
       document.getElementById('header').style.display = 'flex';
