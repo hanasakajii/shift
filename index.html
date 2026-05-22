@@ -1581,17 +1581,24 @@ async function saveSheet() {
   });
   await Promise.all(deleteOps);
 
-  const addOps = newSupportsOut.filter(s => s.to).map(async (sup) => {
-    if (!shiftData[sup.to]) shiftData[sup.to] = {};
-    if (!shiftData[sup.to][ym]) {
-      const d = await kvGet(`shift:${sup.to}:${ym}`);
-      shiftData[sup.to][ym] = (d && typeof d === 'object') ? d : {};
+  // 同じ店舗への応援をまとめてから保存（並列で書き込むと上書き競合が起きるため店舗ごとにグループ化）
+  const addByStore = {};
+  for (const sup of newSupportsOut.filter(s => s.to)) {
+    if (!addByStore[sup.to]) addByStore[sup.to] = [];
+    addByStore[sup.to].push(sup);
+  }
+  const addOps = Object.entries(addByStore).map(async ([toKey, sups]) => {
+    if (!shiftData[toKey]) shiftData[toKey] = {};
+    if (!shiftData[toKey][ym]) {
+      const d = await kvGet(`shift:${toKey}:${ym}`);
+      shiftData[toKey][ym] = (d && typeof d === 'object') ? d : {};
     }
-    const tData = shiftData[sup.to][ym][dateKey] ?? { holidays: [], supports: [] };
-    tData.supports = (tData.supports ?? []).filter(s => !(s.from === storeKey && s.to === sup.to));
-    tData.supports.push(sup);
-    shiftData[sup.to][ym][dateKey] = tData;
-    return saveShiftData(sup.to, ym);
+    const tData = shiftData[toKey][ym][dateKey] ?? { holidays: [], supports: [] };
+    // 同じfromからの既存エントリを一括削除してから全員追加
+    tData.supports = (tData.supports ?? []).filter(s => s.from !== storeKey);
+    for (const sup of sups) tData.supports.push(sup);
+    shiftData[toKey][ym][dateKey] = tData;
+    return saveShiftData(toKey, ym);
   });
   await Promise.all(addOps);
 
