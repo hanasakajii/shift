@@ -764,10 +764,9 @@ function renderTabBar() {
 
 
   document.getElementById('tab-bar').innerHTML = tabs.map(t => {
-    const isActive = isMaster
-      ? (t.key === 'month' && currentTab === 'calendar' && calViewMode === 'month')
-        || (t.key === 'week' && currentTab === 'calendar' && calViewMode === 'week')
-        || (t.key === currentTab && t.key !== 'month' && t.key !== 'week');
+    const isActive = (t.key === 'month' && currentTab === 'calendar' && calViewMode === 'month') || (t.key === 'week' && currentTab === 'calendar' && calViewMode === 'week') || (t.key === currentTab && t.key !== 'month' && t.key !== 'week');
+
+
 
     const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
     const badge = (isMaster && t.key === 'dashboard') ? getUnreadSubmitCount(ym) : 0;
