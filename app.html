@@ -985,8 +985,8 @@ async function renderCalCellsWeek(store, ym) {
     const countHtml = (allStaff.length > 0 && !isClosed)
       ? `<div class="cal-count ${countClass}" style="position:static;margin-top:4px;display:block;">${countLabel}</div>` : '';
 
-    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;"
-onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
+
       + '<div class="cal-date">' + d + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
       + countHtml
@@ -2680,4 +2680,3 @@ init();
 </script>
 </body>
 </html>
-
