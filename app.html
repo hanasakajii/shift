@@ -756,10 +756,12 @@ function renderTabBar() {
         { key: 'dashboard', label: 'ダッシュボード', icon: dashIcon() },
         { key: 'staff', label: 'スタッフ', icon: staffIcon() },
       ]
-    : [
-        { key: 'calendar', label: 'カレンダー', icon: calIcon() },
-        { key: 'submit', label: '提出', icon: submitIcon() },
-      ];
+: [
+    { key: 'month', label: '月', icon: calIcon() },
+    { key: 'week', label: '週', icon: weekIcon() },
+    { key: 'submit', label: '提出', icon: submitIcon() },
+  ];
+
 
   document.getElementById('tab-bar').innerHTML = tabs.map(t => {
     const isActive = isMaster
@@ -983,7 +985,8 @@ async function renderCalCellsWeek(store, ym) {
     const countHtml = (allStaff.length > 0 && !isClosed)
       ? `<div class="cal-count ${countClass}" style="position:static;margin-top:4px;display:block;">${countLabel}</div>` : '';
 
-    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="aspect-ratio:1/1.2;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;"
+onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
       + '<div class="cal-date">' + d + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
       + countHtml
