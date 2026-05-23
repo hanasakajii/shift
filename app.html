@@ -768,7 +768,7 @@ function renderTabBar() {
       ? (t.key === 'month' && currentTab === 'calendar' && calViewMode === 'month')
         || (t.key === 'week' && currentTab === 'calendar' && calViewMode === 'week')
         || (t.key === currentTab && t.key !== 'month' && t.key !== 'week')
-      : (t.key === currentTab);
+
     const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
     const badge = (isMaster && t.key === 'dashboard') ? getUnreadSubmitCount(ym) : 0;
     const badgeHtml = badge > 0 ? `<span style="position:absolute;top:6px;right:calc(50% - 18px);background:var(--danger);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;">${badge}</span>` : '';
