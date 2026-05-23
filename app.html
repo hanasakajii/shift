@@ -987,9 +987,9 @@ async function renderCalCellsWeek(store, ym) {
 
     cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
 
-      + '<div class="cal-date">' + d + '</div>'
+       + '<div style="display:flex;align-items:center;gap:3px;"><div class="cal-date">' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
-      + countHtml
+
       + '</div>';
   }
   document.getElementById('cal-cells').innerHTML = cells;
