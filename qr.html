@@ -53,7 +53,7 @@ const STORES = [
 const grid = document.getElementById('grid');
 
 STORES.forEach(store => {
-  const url = BASE + '#' + store.key;
+  const url = BASE + store.key + '.html';
   const card = document.createElement('div');
   card.className = 'card' + (store.key === 'master' ? ' master' : '');
 
