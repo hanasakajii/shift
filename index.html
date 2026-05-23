@@ -660,36 +660,6 @@ function renderHeader() {
 
 
 
-  // manifest動的切り替え
-const key = isMaster ? 'master' : currentStore?.key;
-  const manifestHref = `/shift/manifest-${key}.json`;
-
-  let link = document.querySelector('link[rel="manifest"]');
-
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'manifest';
-    document.head.appendChild(link);
-  }
-
-  link.href = manifestHref;
-
-  // ↓ここから既存コード
-    // カレンダータブのときだけヘッダーに店舗名を表示
-    if (currentTab === 'calendar') {
-      document.getElementById('header').style.display = 'flex';
-      const storeName = masterViewStore?.name ?? '';
-      document.getElementById('header-title').textContent = storeName;
-      document.getElementById('store-badge').textContent = 'マスター';
-    } else {
-      document.getElementById('header').style.display = 'none';
-    }
-  } else {
-    document.getElementById('header').style.display = 'flex';
-    document.getElementById('header-title').textContent = currentStore.name;
-    document.getElementById('store-badge').textContent = currentStore.name;
-  }
-}
 
 // ============================================================
 // DATA LAYER (Cloudflare KV via Worker)
