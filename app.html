@@ -131,6 +131,7 @@
     margin-bottom: 1px; display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   }
   .tag-holiday { background: #f0f0ee; color: var(--text); }
+  .tag-absence { background: #fdeaea; color: var(--danger); font-weight: 700; }
   .tag-out { background: #fde8e8; color: var(--support-out); }
   .tag-in { background: #e8f2fb; color: var(--support-in); }
 
@@ -285,6 +286,7 @@
     transition: all 0.15s; user-select: none;
   }
   .name-chip.selected-holiday { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .name-chip.selected-absence { background: var(--danger); color: #fff; border-color: var(--danger); }
   .name-chip.selected-out { background: var(--support-out); color: #fff; border-color: var(--support-out); }
   .name-chip.selected-in { background: var(--support-in); color: #fff; border-color: var(--support-in); }
 
@@ -674,7 +676,7 @@ let staffData = {}; // staffData[storeKey] = { staff:[], minStaff:5 }
 let updateLog = []; // [{store, time, text}]
 
 let sheetDate = null;
-let sheetDraft = { holidays: [], supports: [] };
+let sheetDraft = { holidays: [], supports: [], absences: [] };
 let calViewMode = 'month'; // 'month' | 'week'
 let weekOffset = 0; // 週表示時のオフセット（0=今週）
 
@@ -932,15 +934,70 @@ async function renderCalendarPage() {
           </div>
           <div class="cal-grid" id="cal-cells"></div>
         </div>
+        <div id="leave-summary"></div>
       </div>
       <div id="day-detail"><div id="day-detail-content"></div></div>
     </div>
   `;
   if (calViewMode === 'week') {
     await renderCalCellsWeek(viewStore, ym);
+    const summaryEl = document.getElementById('leave-summary');
+    if (summaryEl) summaryEl.innerHTML = '';
   } else {
     renderCalCells(viewStore, ym);
+    renderLeaveSummary(viewStore, ym);
   }
+}
+
+function computeStaffLeaveStats(storeKey, ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const lastDate = new Date(y, m, 0).getDate();
+  const sd = staffData[storeKey] ?? { staff: [] };
+  const staffList = sd.staff ?? [];
+  const closedDow = sd.closedDow ?? STORE_MAP[storeKey]?.closedDow ?? [];
+
+  // 公休（週の定休日回数＝その月の定休日該当日数）
+  let regularCount = 0;
+  for (let d = 1; d <= lastDate; d++) {
+    const dow = new Date(y, m - 1, d).getDay();
+    if (closedDow.includes(dow)) regularCount++;
+  }
+
+  // 有給（カレンダーに名前が入っている日数＝holidays配列の登場回数）
+  const paidMap = {};
+  const monthData = shiftData[storeKey]?.[ym] ?? {};
+  for (let d = 1; d <= lastDate; d++) {
+    const key = `${ym}-${String(d).padStart(2,'0')}`;
+    const holidays = monthData[key]?.holidays ?? [];
+    holidays.forEach(name => { paidMap[name] = (paidMap[name] ?? 0) + 1; });
+  }
+
+  return staffList.map(s => ({
+    name: s.name,
+    paid: paidMap[s.name] ?? 0,
+    regular: regularCount
+  }));
+}
+
+function renderLeaveSummary(store, ym) {
+  const el = document.getElementById('leave-summary');
+  if (!el) return;
+  const stats = computeStaffLeaveStats(store.key, ym);
+  if (stats.length === 0) { el.innerHTML = ''; return; }
+  const [, mm] = ym.split('-');
+  el.innerHTML = `
+    <div style="padding:10px 14px;background:var(--card);border-top:1px solid var(--border);">
+      <div style="font-size:12px;font-weight:700;color:var(--text-sub);margin-bottom:6px;">${+mm}月 有給・公休集計</div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        ${stats.map(s => `
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:2px 0;">
+            <span style="font-weight:600;">${s.name}</span>
+            <span style="color:var(--text-sub);">有給 ${s.paid}日　公休 ${s.regular}日</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 async function selectMasterStore(key) {
@@ -1037,13 +1094,16 @@ async function renderCalCellsWeek(store, ym) {
     const isClosed = calClosedDow.includes(dow) || calSpecialClosed.includes(dateKey);
 
     const holidays = dayData.holidays ?? [];
+    const absences = dayData.absences ?? [];
     const supports = dayData.supports ?? [];
     const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
     const holidayPart = holidays.filter(n => partList.includes(n)).length;
+    const absenceSeishain = absences.filter(n => seishainList.includes(n)).length;
+    const absencePart = absences.filter(n => partList.includes(n)).length;
     const supOutCount = supports.filter(s => s.from === store.key).length;
     const supInCount = supports.filter(s => s.to === store.key).length;
-    const presentSeishain = seishainList.length - holidaySeishain - supOutCount + supInCount;
-    const presentPart = partList.length - holidayPart;
+    const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - supOutCount + supInCount;
+    const presentPart = partList.length - holidayPart - absencePart;
     const countClass = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
     const countLabel = partList.length > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}人`;
 
@@ -1051,6 +1111,7 @@ async function renderCalCellsWeek(store, ym) {
     const tags = [
       ...(isClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
       ...holidays.map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
+      ...absences.map(n => `<span class="cal-tag tag-absence">${n}（欠勤）</span>`),
       ...supports.filter(s => s.from === store.key).map(s => {
         const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
@@ -1099,12 +1160,15 @@ function renderCalCells(store, ym) {
     const isToday = today.getFullYear() === y && today.getMonth() + 1 === m && today.getDate() === d;
     const holidayName = getJPHolidayName(key);
     const holidays = dayData.holidays ?? [];
+    const absences = dayData.absences ?? [];
     const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
     const holidayPart = holidays.filter(n => partList.includes(n)).length;
+    const absenceSeishain = absences.filter(n => seishainList.includes(n)).length;
+    const absencePart = absences.filter(n => partList.includes(n)).length;
     const supOutCount = dayData.supports?.filter(s => s.from === store.key).length ?? 0;
     const supInCount = dayData.supports?.filter(s => s.to === store.key).length ?? 0;
-    const presentSeishain = totalSeishain - holidaySeishain - supOutCount + supInCount;
-    const presentPart = totalPart - holidayPart;
+    const presentSeishain = totalSeishain - holidaySeishain - absenceSeishain - supOutCount + supInCount;
+    const presentPart = totalPart - holidayPart - absencePart;
     const countClass = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
     const countLabel = totalPart > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}人`;
 
@@ -1118,6 +1182,7 @@ function renderCalCells(store, ym) {
     const tags = [
       ...(isCalClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
       ...(dayData.holidays ?? []).slice(0,2).map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
+      ...(dayData.absences ?? []).slice(0,2).map(n => `<span class="cal-tag tag-absence">${n}（欠勤）</span>`),
       ...(dayData.supports ?? []).filter(s => s.from === store.key).slice(0,1).map(s => {
         const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
@@ -1208,11 +1273,12 @@ function openSheet(storeKey, dateKey) {
   if (isMaster) { openMasterSheet(storeKey, dateKey); return; }
 
   const ym = dateKey.slice(0, 7);
-  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [] };
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [] };
   sheetDate = { storeKey, dateKey, ym };
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
-    supports: structuredClone(dayData.supports ?? [])
+    supports: structuredClone(dayData.supports ?? []),
+    absences: [...(dayData.absences ?? [])]
   };
 
   const [y, m, d] = dateKey.split('-');
@@ -1233,6 +1299,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
   const holidays = dayData.holidays ?? [];
+  const absences = dayData.absences ?? [];
   const supports = dayData.supports ?? [];
   const supOut = supports.filter(s => s.from === storeKey);
   const supIn = supports.filter(s => s.to === storeKey);
@@ -1329,6 +1396,43 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   if (supOut.length===0 && supIn.length===0 && (ismaster ? true : (!isClosed && holidays.length===0))) {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">応援者</div>
+      <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+    </div>`;
+  }
+  // 欠勤セクション
+  if (!ismaster) {
+    // 店舗側: スワイプ削除対応（名前ごとに行）
+    if (absences.length > 0) {
+      absences.forEach((n, i) => {
+        html += `<div class="swipe-row" id="swipe-absence-${i}" ontouchstart="swipeStart(this,event)" ontouchmove="swipeMove(this,event)" ontouchend="swipeEnd(this,event)">
+          <div class="swipe-row-inner">
+            <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">欠勤</div>
+            <span class="cal-tag tag-absence" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>
+            <span style="flex:1;"></span>
+            <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+          </div>
+          <button class="swipe-delete-btn" onclick="deleteAbsenceFromDetail('${storeKey}','${dateKey}','${n}')">削除</button>
+        </div>`;
+      });
+    } else {
+      html += `<div class="day-detail-item day-detail-section-row">
+        <div class="day-detail-label" style="margin-bottom:0;">欠勤</div>
+        <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
+        <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      </div>`;
+    }
+  } else if (absences.length > 0) {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">欠勤</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${absences.map(n=>`<span class="cal-tag tag-absence" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('')}
+      </div>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+    </div>`;
+  } else {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">欠勤</div>
       <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
       <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
     </div>`;
@@ -1446,6 +1550,17 @@ async function deleteHolidayFromDetail(storeKey, dateKey, name) {
   setTimeout(() => showDayDetail(storeKey, dateKey, false), 50);
 }
 
+async function deleteAbsenceFromDetail(storeKey, dateKey, name) {
+  const ym = dateKey.slice(0,7);
+  if (!shiftData[storeKey]?.[ym]?.[dateKey]) return;
+  shiftData[storeKey][ym][dateKey].absences = (shiftData[storeKey][ym][dateKey].absences ?? []).filter(n => n !== name);
+  await saveShiftData(storeKey, ym);
+  showToast(`${name}の欠勤を削除しました`);
+  showDayDetail(storeKey, dateKey, false);
+  renderCalendarPage();
+  setTimeout(() => showDayDetail(storeKey, dateKey, false), 50);
+}
+
 async function deleteSupportFromDetail(storeKey, dateKey, idx, ismaster) {
   const ym = dateKey.slice(0,7);
   if (!shiftData[storeKey]?.[ym]?.[dateKey]) return;
@@ -1489,11 +1604,12 @@ function openDayDetail(storeKey, dateKey) {
 function openFullSheet(storeKey, dateKey) {
   // 通常のボトムシートを開く
   const ym = dateKey.slice(0, 7);
-  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [] };
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [] };
   sheetDate = { storeKey, dateKey, ym };
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
-    supports: structuredClone(dayData.supports ?? [])
+    supports: structuredClone(dayData.supports ?? []),
+    absences: [...(dayData.absences ?? [])]
   };
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
@@ -1525,6 +1641,12 @@ function renderSheetBody() {
   const outChips = outCandidates.map(name => {
     const sel = selectedOut.includes(name);
     return `<button class="name-chip ${sel ? 'selected-out' : ''}" data-action="support-out" data-name="${name.replace(/"/g,'&quot;')}">${name}</button>`;
+  }).join('');
+
+  // 欠勤チップ
+  const absenceChips = staffNames.map(name => {
+    const sel = (sheetDraft.absences ?? []).includes(name);
+    return `<button class="name-chip ${sel ? 'selected-absence' : ''}" data-action="absence" data-name="${name.replace(/"/g,'&quot;')}">${name}</button>`;
   }).join('');
 
   // 応援（出）詳細（pending中のcount型＝名前未確定は除外）
@@ -1586,6 +1708,9 @@ function renderSheetBody() {
 
     <div class="sheet-section-label">応援（入）</div>
     <div>${inDisplay}</div>
+
+    <div class="sheet-section-label">欠勤</div>
+    <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
   `;
 
   // イベント委譲: data-action でハンドリング
@@ -1597,6 +1722,7 @@ function renderSheetBody() {
     if (action === 'holiday') toggleHoliday(name);
     else if (action === 'support-out') toggleSupportOut(name);
     else if (action === 'pending') selectPendingStaff(parseInt(btn.dataset.idx), name);
+    else if (action === 'absence') toggleAbsence(name);
   };
 }
 
@@ -1607,6 +1733,16 @@ function toggleHoliday(name) {
     sheetDraft.holidays.push(name);
     // 応援（出）から除外
     sheetDraft.supports = sheetDraft.supports.filter(s => !(s.from === sheetDate.storeKey && s.name === name));
+  }
+  renderSheetBody();
+}
+
+function toggleAbsence(name) {
+  if (!sheetDraft.absences) sheetDraft.absences = [];
+  if (sheetDraft.absences.includes(name)) {
+    sheetDraft.absences = sheetDraft.absences.filter(n => n !== name);
+  } else {
+    sheetDraft.absences.push(name);
   }
   renderSheetBody();
 }
@@ -1727,6 +1863,7 @@ async function saveSheet() {
   const latestSupIn = (latestMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey);
   shiftData[storeKey][ym][dateKey] = {
     holidays: sheetDraft.holidays,
+    absences: sheetDraft.absences ?? [],
     supports: [
       ...normalizedSupports,
       ...latestSupIn
@@ -1861,13 +1998,16 @@ function renderDashboard() {
       const minStaff = sd.minStaff ?? 5;
       const dayData = shiftData[store.key]?.[ym]?.[dateKey] ?? {};
       const holidays = dayData.holidays ?? [];
+      const absences = dayData.absences ?? [];
       const supports = dayData.supports ?? [];
       const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
       const holidayPart = holidays.filter(n => partList.includes(n)).length;
+      const absenceSeishain = absences.filter(n => seishainList.includes(n)).length;
+      const absencePart = absences.filter(n => partList.includes(n)).length;
       const supOut = supports.filter(s => s.from === store.key).length;
       const supIn = supports.filter(s => s.to === store.key).length;
-      const presentSeishain = seishainList.length - holidaySeishain - supOut + supIn;
-      const presentPart = partList.length - holidayPart;
+      const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - supOut + supIn;
+      const presentPart = partList.length - holidayPart - absencePart;
       const cls = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
       const label = partList.length > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}`;
       // 定休日チェック（storeSettings優先、なければSTORESデフォルト）
@@ -1984,7 +2124,7 @@ function selectDashArea(name) {
 // MASTER SHEET（マスターからの応援設定）
 // ============================================================
 let masterSheetDate = null;
-let masterSheetDraft = { supports: [], holidays: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
+let masterSheetDraft = { supports: [], holidays: [], absences: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
 
 async function openMasterSheet(storeKey, dateKey) {
   const ym = dateKey.slice(0, 7);
@@ -1997,7 +2137,8 @@ async function openMasterSheet(storeKey, dateKey) {
   masterSheetDate = { storeKey, dateKey, ym };
   masterSheetDraft = {
     supports: structuredClone(dayData.supports ?? []),
-    holidays: structuredClone(dayData.holidays ?? [])
+    holidays: structuredClone(dayData.holidays ?? []),
+    absences: structuredClone(dayData.absences ?? [])
   };
 
   const [y, m, d] = dateKey.split('-');
@@ -2026,6 +2167,13 @@ function renderMasterSheetBody() {
   const holidayChips = staffNames.map(name => {
     const sel = holidaysDraft.includes(name);
     return `<button class="name-chip ${sel ? 'selected-holiday' : ''}" onclick="toggleMasterHoliday('${name.replace(/"/g,'&quot;')}')">${name}</button>`;
+  }).join('');
+
+  // 欠勤（マスターから編集可能）
+  const absencesDraft = masterSheetDraft.absences ?? [];
+  const absenceChips = staffNames.map(name => {
+    const sel = absencesDraft.includes(name);
+    return `<button class="name-chip ${sel ? 'selected-absence' : ''}" onclick="toggleMasterAbsence('${name.replace(/"/g,'&quot;')}')">${name}</button>`;
   }).join('');
 
   // 応援設定リスト
@@ -2089,7 +2237,9 @@ function renderMasterSheetBody() {
   // この日に既存データがあるか
   const hasData = (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.supports ?? []).length > 0
     || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.holidays ?? []).length > 0
-    || holidaysDraft.length > 0;
+    || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.absences ?? []).length > 0
+    || holidaysDraft.length > 0
+    || absencesDraft.length > 0;
 
   document.getElementById('sheet-body').innerHTML = `
     <div class="sheet-section-label">公休</div>
@@ -2106,6 +2256,9 @@ function renderMasterSheetBody() {
       <div class="sheet-section-label">応援（入）</div>
       <div>${supInDisplay}</div>
     ` : ''}
+
+    <div class="sheet-section-label">欠勤</div>
+    <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
 
     ${hasData ? `
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
@@ -2177,6 +2330,16 @@ function toggleMasterHoliday(name) {
   renderMasterSheetBody();
 }
 
+function toggleMasterAbsence(name) {
+  if (!masterSheetDraft.absences) masterSheetDraft.absences = [];
+  if (masterSheetDraft.absences.includes(name)) {
+    masterSheetDraft.absences = masterSheetDraft.absences.filter(n => n !== name);
+  } else {
+    masterSheetDraft.absences.push(name);
+  }
+  renderMasterSheetBody();
+}
+
 async function saveMasterSheet() {
   const { storeKey, dateKey, ym } = masterSheetDate;
   const invalid = masterSheetDraft.supports.filter(s => s.from === storeKey && !s.to);
@@ -2233,6 +2396,7 @@ async function saveMasterSheet() {
     ...latestMasterSupIn
   ];
   shiftData[storeKey][ym][dateKey].holidays = masterSheetDraft.holidays ?? [];
+  shiftData[storeKey][ym][dateKey].absences = masterSheetDraft.absences ?? [];
   await saveShiftData(storeKey, ym);
 
   closeSheet();
