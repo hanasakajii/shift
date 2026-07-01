@@ -696,6 +696,7 @@ let staffData = {}; // staffData[storeKey] = { staff:[], minStaff:5 }
 let updateLog = []; // [{store, time, text}]
 
 let sheetDate = null;
+let sheetSection = 'all'; // 'holiday' | 'support' | 'absence' | 'all'
 let sheetDraft = { holidays: [], supports: [], absences: [] };
 let calViewMode = 'month'; // 'month' | 'week'
 let weekOffset = 0; // 週表示時のオフセット（0=今週）
@@ -1080,11 +1081,14 @@ function computeStaffLeaveStats(storeKey, ym) {
     holidays.forEach(name => { paidMap[name] = (paidMap[name] ?? 0) + 1; });
   }
 
-  return staffList.map(s => ({
-    name: s.name,
-    paid: paidMap[s.name] ?? 0,
-    regular: regularCount
-  }));
+  return staffList.map(s => {
+    const isPart = s.type === 'part';
+    if (isPart) {
+      // パートは有給の概念なし。カレンダー上の休みはすべて公休として計上
+      return { name: s.name, paid: 0, regular: paidMap[s.name] ?? 0 };
+    }
+    return { name: s.name, paid: paidMap[s.name] ?? 0, regular: regularCount };
+  });
 }
 
 function renderLeaveSummary(store, ym) {
@@ -1383,6 +1387,7 @@ function openSheet(storeKey, dateKey) {
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [] };
   sheetDate = { storeKey, dateKey, ym };
+  sheetSection = 'all';
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
     supports: structuredClone(dayData.supports ?? []),
@@ -1416,7 +1421,9 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const calSpecialClosed = storeSettings.specialClosedDates ?? [];
   const isClosed = calClosedDow.includes(new Date(+y,+m-1,+d).getDay()) || calSpecialClosed.includes(dateKey);
   const storeName = ismaster ? (STORE_MAP[storeKey]?.name??storeKey)+' ' : '';
-  const editFn = ismaster ? `openMasterSheet('${storeKey}','${dateKey}')` : `openFullSheet('${storeKey}','${dateKey}')`;
+  const editFnHoliday = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','holiday')` : `openFullSheet('${storeKey}','${dateKey}','holiday')`;
+  const editFnSupport = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','support')` : `openFullSheet('${storeKey}','${dateKey}','support')`;
+  const editFnAbsence = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','absence')` : `openFullSheet('${storeKey}','${dateKey}','absence')`;
   const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
 
   let html = `<div class="day-detail-header">
@@ -1443,7 +1450,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
             <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">公休</div>
             <span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>
             <span style="flex:1;"></span>
-            <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+            <button class="day-detail-add-btn" onclick="${editFnHoliday}">＋</button>
           </div>
           <button class="swipe-delete-btn" onclick="deleteHolidayFromDetail('${storeKey}','${dateKey}','${n}')">削除</button>
         </div>`;
@@ -1452,7 +1459,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       html += `<div class="day-detail-item day-detail-section-row">
         <div class="day-detail-label" style="margin-bottom:0;">公休</div>
         <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
-        <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+        <button class="day-detail-add-btn" onclick="${editFnHoliday}">＋</button>
       </div>`;
     }
   } else if (holidays.length > 0) {
@@ -1461,13 +1468,13 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
         ${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('')}
       </div>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      <button class="day-detail-add-btn" onclick="${editFnHoliday}">＋</button>
     </div>`;
   } else {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">公休</div>
       <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      <button class="day-detail-add-btn" onclick="${editFnHoliday}">＋</button>
     </div>`;
   }
   // 応援（出）セクション: スワイプ削除対応
@@ -1483,7 +1490,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
           <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">応援（出）</div>
           <span class="cal-tag tag-out" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>
           <span style="flex:1;"></span>
-          <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+          <button class="day-detail-add-btn" onclick="${editFnSupport}">＋</button>
         </div>
         <button class="swipe-delete-btn" onclick="${delFn}">削除</button>
       </div>`;
@@ -1505,7 +1512,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">応援者</div>
       <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      <button class="day-detail-add-btn" onclick="${editFnSupport}">＋</button>
     </div>`;
   }
   // 欠勤セクション
@@ -1518,7 +1525,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
             <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">欠勤</div>
             <span class="cal-tag tag-absence" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>
             <span style="flex:1;"></span>
-            <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+            <button class="day-detail-add-btn" onclick="${editFnAbsence}">＋</button>
           </div>
           <button class="swipe-delete-btn" onclick="deleteAbsenceFromDetail('${storeKey}','${dateKey}','${n}')">削除</button>
         </div>`;
@@ -1527,7 +1534,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       html += `<div class="day-detail-item day-detail-section-row">
         <div class="day-detail-label" style="margin-bottom:0;">欠勤</div>
         <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
-        <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+        <button class="day-detail-add-btn" onclick="${editFnAbsence}">＋</button>
       </div>`;
     }
   } else if (absences.length > 0) {
@@ -1536,13 +1543,13 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
         ${absences.map(n=>`<span class="cal-tag tag-absence" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('')}
       </div>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      <button class="day-detail-add-btn" onclick="${editFnAbsence}">＋</button>
     </div>`;
   } else {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">欠勤</div>
       <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
-      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+      <button class="day-detail-add-btn" onclick="${editFnAbsence}">＋</button>
     </div>`;
   }
   return html;
@@ -1709,11 +1716,12 @@ function openDayDetail(storeKey, dateKey) {
   showDayDetail(storeKey, dateKey, false);
 }
 
-function openFullSheet(storeKey, dateKey) {
+function openFullSheet(storeKey, dateKey, section) {
   // 通常のボトムシートを開く
   const ym = dateKey.slice(0, 7);
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [] };
   sheetDate = { storeKey, dateKey, ym };
+  sheetSection = section || 'all';
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
     supports: structuredClone(dayData.supports ?? []),
@@ -1721,8 +1729,9 @@ function openFullSheet(storeKey, dateKey) {
   };
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
+  const sectionLabel = { holiday: '公休', support: '応援', absence: '欠勤', all: '' }[sheetSection];
   document.getElementById('sheet-title').textContent = `${+m}月${+d}日（${dow}）`;
-  document.getElementById('sheet-subtitle').textContent = currentStore.name;
+  document.getElementById('sheet-subtitle').textContent = sectionLabel ? `${currentStore.name}・${sectionLabel}` : currentStore.name;
   renderSheetBody();
   document.querySelector('.sheet-footer').innerHTML = `
     <button class="btn-primary" onclick="saveSheet()">保存</button>
@@ -1801,24 +1810,34 @@ function renderSheetBody() {
       }).join('')
     : '';
 
+  const showHoliday = sheetSection === 'all' || sheetSection === 'holiday';
+  const showSupport = sheetSection === 'all' || sheetSection === 'support';
+  const showAbsence = sheetSection === 'all' || sheetSection === 'absence';
+
   // 古いイベントリスナーを完全削除してから再生成
   const oldSheetBody = document.getElementById('sheet-body');
   const sheetBody = oldSheetBody.cloneNode(false);
   oldSheetBody.replaceWith(sheetBody);
   sheetBody.innerHTML = `
-    ${pendingHtml ? `<div class="sheet-section-label">応援要請（マスターから）</div>${pendingHtml}` : ''}
-    <div class="sheet-section-label">公休</div>
-    <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ${(showSupport && pendingHtml) ? `<div class="sheet-section-label">応援要請（マスターから）</div>${pendingHtml}` : ''}
+    ${showHoliday ? `
+      <div class="sheet-section-label">公休</div>
+      <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ` : ''}
 
-    <div class="sheet-section-label">応援（出）</div>
-    <div class="name-chips">${outChips || '<span style="color:var(--text-sub);font-size:13px;">-</span>'}</div>
-    ${outDetails ? `<div style="margin-top:10px;">${outDetails}</div>` : ''}
+    ${showSupport ? `
+      <div class="sheet-section-label">応援（出）</div>
+      <div class="name-chips">${outChips || '<span style="color:var(--text-sub);font-size:13px;">-</span>'}</div>
+      ${outDetails ? `<div style="margin-top:10px;">${outDetails}</div>` : ''}
 
-    <div class="sheet-section-label">応援（入）</div>
-    <div>${inDisplay}</div>
+      <div class="sheet-section-label">応援（入）</div>
+      <div>${inDisplay}</div>
+    ` : ''}
 
-    <div class="sheet-section-label">欠勤</div>
-    <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ${showAbsence ? `
+      <div class="sheet-section-label">欠勤</div>
+      <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ` : ''}
   `;
 
   // イベント委譲: data-action でハンドリング
@@ -2232,9 +2251,10 @@ function selectDashArea(name) {
 // MASTER SHEET（マスターからの応援設定）
 // ============================================================
 let masterSheetDate = null;
+let masterSheetSection = 'all'; // 'holiday' | 'support' | 'absence' | 'all'
 let masterSheetDraft = { supports: [], holidays: [], absences: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
 
-async function openMasterSheet(storeKey, dateKey) {
+async function openMasterSheet(storeKey, dateKey, section) {
   const ym = dateKey.slice(0, 7);
   if (!shiftData[storeKey]) shiftData[storeKey] = {};
   if (!shiftData[storeKey][ym]) {
@@ -2243,6 +2263,7 @@ async function openMasterSheet(storeKey, dateKey) {
   }
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
   masterSheetDate = { storeKey, dateKey, ym };
+  masterSheetSection = section || 'all';
   masterSheetDraft = {
     supports: structuredClone(dayData.supports ?? []),
     holidays: structuredClone(dayData.holidays ?? []),
@@ -2252,8 +2273,9 @@ async function openMasterSheet(storeKey, dateKey) {
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
   const storeName = STORE_MAP[storeKey]?.name??storeKey;
+  const sectionLabel = { holiday: '公休設定', support: '応援設定', absence: '欠勤設定', all: '公休・応援設定' }[masterSheetSection];
   document.getElementById('sheet-title').textContent = `${storeName} ${+m}月${+d}日（${dow}）`;
-  document.getElementById('sheet-subtitle').textContent = 'マスター 公休・応援設定';
+  document.getElementById('sheet-subtitle').textContent = `マスター ${sectionLabel}`;
   renderMasterSheetBody();
   document.getElementById('sheet-overlay').classList.add('open');
   // フッターのボタンを差し替え
@@ -2349,24 +2371,34 @@ function renderMasterSheetBody() {
     || holidaysDraft.length > 0
     || absencesDraft.length > 0;
 
+  const showHoliday = masterSheetSection === 'all' || masterSheetSection === 'holiday';
+  const showSupport = masterSheetSection === 'all' || masterSheetSection === 'support';
+  const showAbsence = masterSheetSection === 'all' || masterSheetSection === 'absence';
+
   document.getElementById('sheet-body').innerHTML = `
-    <div class="sheet-section-label">公休</div>
-    <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
-
-    <div class="sheet-section-label">応援（出）設定</div>
-    ${supportItems}
-    <div style="display:flex;gap:8px;margin-top:8px;">
-      <button onclick="addMasterSupport('count')" style="flex:1;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;font-size:13px;color:var(--text-sub);cursor:pointer;font-family:inherit;">＋ 人数で指定</button>
-      <button onclick="addMasterSupport('name')" style="flex:1;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;font-size:13px;color:var(--text-sub);cursor:pointer;font-family:inherit;">＋ 名前で指定</button>
-    </div>
-
-    ${supIn.length > 0 ? `
-      <div class="sheet-section-label">応援（入）</div>
-      <div>${supInDisplay}</div>
+    ${showHoliday ? `
+      <div class="sheet-section-label">公休</div>
+      <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
     ` : ''}
 
-    <div class="sheet-section-label">欠勤</div>
-    <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ${showSupport ? `
+      <div class="sheet-section-label">応援（出）設定</div>
+      ${supportItems}
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button onclick="addMasterSupport('count')" style="flex:1;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;font-size:13px;color:var(--text-sub);cursor:pointer;font-family:inherit;">＋ 人数で指定</button>
+        <button onclick="addMasterSupport('name')" style="flex:1;padding:10px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);background:none;font-size:13px;color:var(--text-sub);cursor:pointer;font-family:inherit;">＋ 名前で指定</button>
+      </div>
+
+      ${supIn.length > 0 ? `
+        <div class="sheet-section-label">応援（入）</div>
+        <div>${supInDisplay}</div>
+      ` : ''}
+    ` : ''}
+
+    ${showAbsence ? `
+      <div class="sheet-section-label">欠勤</div>
+      <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ` : ''}
 
     ${hasData ? `
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
