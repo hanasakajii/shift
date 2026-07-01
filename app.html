@@ -1084,10 +1084,10 @@ function computeStaffLeaveStats(storeKey, ym) {
   return staffList.map(s => {
     const isPart = s.type === 'part';
     if (isPart) {
-      // パートは有給の概念なし。カレンダー上の休みはすべて公休として計上
-      return { name: s.name, paid: 0, regular: paidMap[s.name] ?? 0 };
+      // パートは有給の概念なし。定休日回数＋カレンダー上の休み日数をすべて公休として計上
+      return { name: s.name, isPart: true, paid: 0, regular: regularCount + (paidMap[s.name] ?? 0) };
     }
-    return { name: s.name, paid: paidMap[s.name] ?? 0, regular: regularCount };
+    return { name: s.name, isPart: false, paid: paidMap[s.name] ?? 0, regular: regularCount };
   });
 }
 
@@ -1104,7 +1104,7 @@ function renderLeaveSummary(store, ym) {
         ${stats.map(s => `
           <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:2px 0;">
             <span style="font-weight:600;">${s.name}</span>
-            <span style="color:var(--text-sub);">有給 ${s.paid}日　公休 ${s.regular}日</span>
+            <span style="color:var(--text-sub);">${s.isPart ? '' : `有給 ${s.paid}日　`}公休 ${s.regular}日</span>
           </div>
         `).join('')}
       </div>
