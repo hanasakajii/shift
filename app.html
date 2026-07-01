@@ -51,6 +51,25 @@
     padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
   }
   #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 12px); }
+  #pull-refresh-indicator {
+    position: fixed;
+    left: 0; right: 0;
+    display: flex; justify-content: center; align-items: center;
+    height: 50px;
+    transform: translateY(-60px);
+    opacity: 0;
+    z-index: 60;
+    pointer-events: none;
+  }
+  #pull-refresh-indicator .pull-spinner {
+    width: 22px; height: 22px;
+    border: 2.5px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    transition: transform 0.1s;
+  }
+  #pull-refresh-indicator.spinning .pull-spinner { animation: pull-spin 0.7s linear infinite; }
+  @keyframes pull-spin { to { transform: rotate(360deg); } }
   #content.calendar-mode { padding-bottom: 0; overflow: hidden; }
   #tab-bar {
     height: var(--tab-h); background: var(--card); border-top: 1px solid var(--border);
@@ -485,6 +504,7 @@
     <h1 id="header-title">シフト管理</h1>
     <span class="store-badge" id="store-badge"></span>
   </div>
+  <div id="pull-refresh-indicator"><div class="pull-spinner"></div></div>
   <div id="content"></div>
   <div id="tab-bar"></div>
 </div>
@@ -710,6 +730,7 @@ async function init() {
   renderTabBar();
   await loadAllData();
   renderCurrentTab();
+  setupPullToRefresh();
   // 隣月を裏で先読み
   setTimeout(() => prefetchAdjacentMonths(), 1000);
   // プッシュ通知初期化
@@ -775,8 +796,8 @@ async function kvSet(key, value) {
   }
 }
 
-async function loadAllData() {
-  showLoading();
+async function loadAllData(silent) {
+  if (!silent) showLoading();
   const ym = `${currentYear}-${String(currentMonth).padStart(2,'0')}`;
   const storeList = isMaster ? STORES : [currentStore];
 
@@ -809,6 +830,93 @@ async function loadAllData() {
       typeof s === 'string' ? { name: s, type: 'seishain' } : s
     );
   }
+}
+
+// ============================================================
+// PULL TO REFRESH（下スワイプで更新）
+// ============================================================
+async function pullToRefresh() {
+  await loadAllData(true);
+  if (currentTab === 'calendar') {
+    renderCalendarPage();
+  } else if (currentTab === 'dashboard') {
+    renderDashboard();
+  } else if (currentTab === 'staff') {
+    renderStaffMgmt();
+  } else if (currentTab === 'submit') {
+    renderSubmitPage();
+  }
+}
+
+function setupPullToRefresh() {
+  const content = document.getElementById('content');
+  const indicator = document.getElementById('pull-refresh-indicator');
+  if (!content || !indicator) return;
+
+  const header = document.getElementById('header');
+  const THRESHOLD = 65;
+  const MAX_PULL = 90;
+  let startY = 0;
+  let pulling = false;
+  let refreshing = false;
+  let dist = 0;
+
+  const setIndicatorTop = () => {
+    indicator.style.top = `${header ? header.offsetHeight : 0}px`;
+  };
+  setIndicatorTop();
+  window.addEventListener('resize', setIndicatorTop);
+
+  content.addEventListener('touchstart', (e) => {
+    if (refreshing) return;
+    // シートやパネルが開いている間は無効化
+    const sheetOpen = document.getElementById('sheet-overlay')?.classList.contains('open');
+    if (sheetOpen) { pulling = false; return; }
+    if (content.scrollTop <= 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    } else {
+      pulling = false;
+    }
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    if (!pulling || refreshing) return;
+    const diff = e.touches[0].clientY - startY;
+    if (diff > 0 && content.scrollTop <= 0) {
+      dist = Math.min(diff * 0.5, MAX_PULL);
+      setIndicatorTop();
+      indicator.style.transform = `translateY(${dist}px)`;
+      indicator.style.opacity = Math.min(dist / THRESHOLD, 1);
+    } else {
+      dist = 0;
+    }
+  }, { passive: true });
+
+  content.addEventListener('touchend', async () => {
+    if (!pulling || refreshing) { pulling = false; return; }
+    pulling = false;
+    if (dist >= THRESHOLD) {
+      refreshing = true;
+      indicator.classList.add('spinning');
+      setIndicatorTop();
+      indicator.style.transform = `translateY(${THRESHOLD}px)`;
+      indicator.style.opacity = 1;
+      try {
+        await pullToRefresh();
+      } catch (err) {
+        showToast('更新に失敗しました');
+      }
+      indicator.classList.remove('spinning');
+      indicator.style.transform = 'translateY(-60px)';
+      indicator.style.opacity = 0;
+      refreshing = false;
+    } else {
+      indicator.style.transform = 'translateY(-60px)';
+      indicator.style.opacity = 0;
+    }
+    dist = 0;
+  });
 }
 
 async function saveShiftData(storeKey, ym) {
