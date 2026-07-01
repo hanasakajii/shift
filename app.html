@@ -115,6 +115,8 @@
   .cal-cell:nth-child(7n) { border-right: none; }
   .cal-cell:active { background: var(--accent-light); }
   .cal-cell.empty { background: var(--bg); cursor: default; }
+  .cal-cell.closed-day { background: #ececea; }
+  .cal-cell.closed-day:active { background: #e0e0dd; }
   .cal-cell.today .cal-date { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .cal-date { font-size: 13px; font-weight: 600; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .cal-date-row { display: flex; align-items: center; gap: 3px; }
@@ -1065,7 +1067,7 @@ async function renderCalCellsWeek(store, ym) {
       ? `<div class="cal-count ${countClass}" style="position:static;margin-top:4px;display:block;">${countLabel}</div>` : '';
 
     const dateStyle = (holidayName && !isToday) ? ' style="color:var(--danger)"' : '';
-    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + (isClosed ? ' closed-day' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
 
        + '<div style="display:flex;align-items:center;gap:3px;"><div class="cal-date"' + dateStyle + '>' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
@@ -1130,7 +1132,7 @@ function renderCalCells(store, ym) {
 
     const countHtml = (allStaff.length > 0 && !isCalClosed) ? '<span class="cal-count ' + countClass + '">' + countLabel + '</span>' : '';
     const dateStyle = (holidayName && !isToday) ? ' style="color:var(--danger)"' : '';
-    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" data-key="' + key + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
+    cells += '<div class="cal-cell' + (isToday ? ' today' : '') + (isCalClosed ? ' closed-day' : '') + '" data-key="' + key + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
       + '<div class="cal-date-row"><div class="cal-date"' + dateStyle + '>' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
       + '</div>';
