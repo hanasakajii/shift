@@ -578,8 +578,86 @@ const AREAS = [
 ];
 
 // ============================================================
-// STATE
+// 日本の祝日判定（カレンダー赤字表示用）
+// ハッピーマンデー・振替休日・国民の休日に対応
 // ============================================================
+const JP_HOLIDAY_CACHE = {};
+
+function nthMonday(year, month, n) {
+  const d = new Date(year, month - 1, 1);
+  let count = 0;
+  while (true) {
+    if (d.getDay() === 1) {
+      count++;
+      if (count === n) return d.getDate();
+    }
+    d.setDate(d.getDate() + 1);
+  }
+}
+
+function shunbunDay(year) {
+  // 春分の日（近似式・1980-2099年対応）
+  return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+function shubunDay(year) {
+  // 秋分の日（近似式・1980-2099年対応）
+  return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+function buildJPHolidays(year) {
+  const fmt = (m, d) => `${year}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const map = {};
+  map[fmt(1, 1)] = '元日';
+  map[fmt(1, nthMonday(year, 1, 2))] = '成人の日';
+  map[fmt(2, 11)] = '建国記念の日';
+  if (year >= 2020) map[fmt(2, 23)] = '天皇誕生日';
+  map[fmt(3, shunbunDay(year))] = '春分の日';
+  map[fmt(4, 29)] = '昭和の日';
+  map[fmt(5, 3)] = '憲法記念日';
+  map[fmt(5, 4)] = 'みどりの日';
+  map[fmt(5, 5)] = 'こどもの日';
+  map[fmt(7, nthMonday(year, 7, 3))] = '海の日';
+  map[fmt(8, 11)] = '山の日';
+  map[fmt(9, nthMonday(year, 9, 3))] = '敬老の日';
+  map[fmt(9, shubunDay(year))] = '秋分の日';
+  map[fmt(10, nthMonday(year, 10, 2))] = 'スポーツの日';
+  map[fmt(11, 3)] = '文化の日';
+  map[fmt(11, 23)] = '勤労感謝の日';
+
+  // 国民の休日（前後を祝日に挟まれた平日）
+  const dates = Object.keys(map).sort();
+  for (const key of dates) {
+    const d = new Date(key);
+    const next = new Date(d); next.setDate(next.getDate() + 2);
+    const nextKey = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')}`;
+    if (map[nextKey]) {
+      const mid = new Date(d); mid.setDate(mid.getDate() + 1);
+      const midKey = `${mid.getFullYear()}-${String(mid.getMonth()+1).padStart(2,'0')}-${String(mid.getDate()).padStart(2,'0')}`;
+      if (!map[midKey] && mid.getDay() !== 0) map[midKey] = '国民の休日';
+    }
+  }
+
+  // 振替休日（日曜が祝日の場合、直後の祝日でない平日を振替）
+  for (const key of Object.keys(map)) {
+    const d = new Date(key);
+    if (d.getDay() === 0) {
+      const sub = new Date(d);
+      do { sub.setDate(sub.getDate() + 1); } while (map[`${sub.getFullYear()}-${String(sub.getMonth()+1).padStart(2,'0')}-${String(sub.getDate()).padStart(2,'0')}`]);
+      const subKey = `${sub.getFullYear()}-${String(sub.getMonth()+1).padStart(2,'0')}-${String(sub.getDate()).padStart(2,'0')}`;
+      map[subKey] = '振替休日';
+    }
+  }
+  return map;
+}
+
+function getJPHolidayName(dateKey) {
+  const year = +dateKey.slice(0, 4);
+  if (!JP_HOLIDAY_CACHE[year]) JP_HOLIDAY_CACHE[year] = buildJPHolidays(year);
+  return JP_HOLIDAY_CACHE[year][dateKey] || null;
+}
+
+
 let currentStore = null; // null = master
 let isMaster = false;
 let currentYear = new Date().getFullYear();
@@ -947,6 +1025,7 @@ async function renderCalCellsWeek(store, ym) {
     const minStaff = sd.minStaff ?? 5;
 
     const isToday = today.getFullYear()===y && today.getMonth()+1===m && today.getDate()===d;
+    const holidayName = getJPHolidayName(dateKey);
 
     // 定休日チェック
     const storeSettings = staffData[store.key] ?? {};
@@ -985,9 +1064,10 @@ async function renderCalCellsWeek(store, ym) {
     const countHtml = (allStaff.length > 0 && !isClosed)
       ? `<div class="cal-count ${countClass}" style="position:static;margin-top:4px;display:block;">${countLabel}</div>` : '';
 
+    const dateStyle = (holidayName && !isToday) ? ' style="color:var(--danger)"' : '';
     cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" style="min-height:120px;" onclick="openSheet(\`' + store.key + '\`,\`' + dateKey + '\`)">'
 
-       + '<div style="display:flex;align-items:center;gap:3px;"><div class="cal-date">' + d + '</div>' + countHtml + '</div>'
+       + '<div style="display:flex;align-items:center;gap:3px;"><div class="cal-date"' + dateStyle + '>' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
 
       + '</div>';
@@ -1015,6 +1095,7 @@ function renderCalCells(store, ym) {
     const key = `${ym}-${String(d).padStart(2,'0')}`;
     const dayData = data[key] ?? { holidays: [], supports: [] };
     const isToday = today.getFullYear() === y && today.getMonth() + 1 === m && today.getDate() === d;
+    const holidayName = getJPHolidayName(key);
     const holidays = dayData.holidays ?? [];
     const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
     const holidayPart = holidays.filter(n => partList.includes(n)).length;
@@ -1048,8 +1129,9 @@ function renderCalCells(store, ym) {
     ].join('');
 
     const countHtml = (allStaff.length > 0 && !isCalClosed) ? '<span class="cal-count ' + countClass + '">' + countLabel + '</span>' : '';
+    const dateStyle = (holidayName && !isToday) ? ' style="color:var(--danger)"' : '';
     cells += '<div class="cal-cell' + (isToday ? ' today' : '') + '" data-key="' + key + '" onclick="openSheet(\`' + store.key + '\`,\`' + key + '\`)">'
-      + '<div class="cal-date-row"><div class="cal-date">' + d + '</div>' + countHtml + '</div>'
+      + '<div class="cal-date-row"><div class="cal-date"' + dateStyle + '>' + d + '</div>' + countHtml + '</div>'
       + '<div class="cal-info">' + tags + '</div>'
       + '</div>';
   }
@@ -1202,6 +1284,13 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
         ${holidays.map(n=>`<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;">${n}</span>`).join('')}
       </div>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
+    </div>`;
+  } else {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">公休</div>
+      <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
+      <button class="day-detail-add-btn" onclick="${editFn}">＋</button>
     </div>`;
   }
   // 応援（出）セクション: スワイプ削除対応
@@ -1235,7 +1324,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       </div>
     </div>`;
   }
-  if (!isClosed && supOut.length===0 && supIn.length===0 && holidays.length===0) {
+  if (supOut.length===0 && supIn.length===0 && (ismaster ? true : (!isClosed && holidays.length===0))) {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">応援者</div>
       <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
@@ -1759,7 +1848,8 @@ function renderDashboard() {
     const dow = ['日','月','火','水','木','金','土'][new Date(currentYear, currentMonth-1, d).getDay()];
     const isSun = new Date(currentYear, currentMonth-1, d).getDay() === 0;
     const isSat = new Date(currentYear, currentMonth-1, d).getDay() === 6;
-    const dateColor = isSun ? 'color:var(--danger)' : isSat ? 'color:var(--support-in)' : '';
+    const isHoliday = !!getJPHolidayName(dateKey);
+    const dateColor = (isSun || isHoliday) ? 'color:var(--danger)' : isSat ? 'color:var(--support-in)' : '';
 
     const cells = filteredStores.map(store => {
       const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
@@ -1892,7 +1982,7 @@ function selectDashArea(name) {
 // MASTER SHEET（マスターからの応援設定）
 // ============================================================
 let masterSheetDate = null;
-let masterSheetDraft = { supports: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
+let masterSheetDraft = { supports: [], holidays: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
 
 async function openMasterSheet(storeKey, dateKey) {
   const ym = dateKey.slice(0, 7);
@@ -1904,14 +1994,15 @@ async function openMasterSheet(storeKey, dateKey) {
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
   masterSheetDate = { storeKey, dateKey, ym };
   masterSheetDraft = {
-    supports: structuredClone(dayData.supports ?? [])
+    supports: structuredClone(dayData.supports ?? []),
+    holidays: structuredClone(dayData.holidays ?? [])
   };
 
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
   const storeName = STORE_MAP[storeKey]?.name??storeKey;
   document.getElementById('sheet-title').textContent = `${storeName} ${+m}月${+d}日（${dow}）`;
-  document.getElementById('sheet-subtitle').textContent = 'マスター応援設定';
+  document.getElementById('sheet-subtitle').textContent = 'マスター 公休・応援設定';
   renderMasterSheetBody();
   document.getElementById('sheet-overlay').classList.add('open');
   // フッターのボタンを差し替え
@@ -1928,9 +2019,12 @@ function renderMasterSheetBody() {
   const sd = staffData[storeKey] ?? { staff: [] };
   const staffNames = (sd.staff ?? []).map(s => typeof s === 'string' ? s : s.name);
 
-  // 現在の公休表示
-  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
-  const holidays = dayData.holidays ?? [];
+  // 公休（マスターから編集可能）
+  const holidaysDraft = masterSheetDraft.holidays ?? [];
+  const holidayChips = staffNames.map(name => {
+    const sel = holidaysDraft.includes(name);
+    return `<button class="name-chip ${sel ? 'selected-holiday' : ''}" onclick="toggleMasterHoliday('${name.replace(/"/g,'&quot;')}')">${name}</button>`;
+  }).join('');
 
   // 応援設定リスト
   const supportsOut = masterSheetDraft.supports.filter(s => s.from === storeKey);
@@ -1971,7 +2065,7 @@ function renderMasterSheetBody() {
           <div style="margin-top:8px;">
             <div style="font-size:12px;color:var(--text-sub);margin-bottom:6px;">誰が行くか：</div>
             <div class="name-chips">
-              ${staffNames.filter(n => !holidays.includes(n)).map(n =>
+              ${staffNames.filter(n => !holidaysDraft.includes(n)).map(n =>
                 `<button class="name-chip ${sup.name===n?'selected-out':''}" onclick="setMasterSupportName(${i},'${n}')">${n}</button>`
               ).join('') || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}
             </div>
@@ -1979,11 +2073,6 @@ function renderMasterSheetBody() {
         </div>`;
     }
   }).join('');
-
-  // 公休表示
-  const holidayDisplay = holidays.length > 0
-    ? holidays.map(n => `<span class="cal-tag tag-holiday" style="font-size:12px;padding:4px 8px;display:inline-block;margin:2px;">${n}</span>`).join('')
-    : '<span style="color:var(--text-sub);font-size:13px;">なし</span>';
 
   // 応援（入）表示
   const supIn = masterSheetDraft.supports.filter(s => s.to === storeKey);
@@ -1997,13 +2086,12 @@ function renderMasterSheetBody() {
 
   // この日に既存データがあるか
   const hasData = (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.supports ?? []).length > 0
-    || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.holidays ?? []).length > 0;
+    || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.holidays ?? []).length > 0
+    || holidaysDraft.length > 0;
 
   document.getElementById('sheet-body').innerHTML = `
-    ${holidays.length > 0 ? `
-      <div class="sheet-section-label">公休</div>
-      <div>${holidayDisplay}</div>
-    ` : ''}
+    <div class="sheet-section-label">公休</div>
+    <div class="name-chips">${holidayChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
 
     <div class="sheet-section-label">応援（出）設定</div>
     ${supportItems}
@@ -2076,6 +2164,17 @@ async function deleteMasterDayData() {
   showToast('削除しました');
 }
 
+function toggleMasterHoliday(name) {
+  if (masterSheetDraft.holidays.includes(name)) {
+    masterSheetDraft.holidays = masterSheetDraft.holidays.filter(n => n !== name);
+  } else {
+    masterSheetDraft.holidays.push(name);
+    // 公休にしたスタッフは応援（出）から除外
+    masterSheetDraft.supports = masterSheetDraft.supports.filter(s => !(s.from === masterSheetDate.storeKey && s.name === name));
+  }
+  renderMasterSheetBody();
+}
+
 async function saveMasterSheet() {
   const { storeKey, dateKey, ym } = masterSheetDate;
   const invalid = masterSheetDraft.supports.filter(s => s.from === storeKey && !s.to);
@@ -2124,15 +2223,14 @@ async function saveMasterSheet() {
     if (latestMasterMonth._submitted) shiftData[storeKey][ym]._submitted = latestMasterMonth._submitted;
   }
 
-  // 自店データ更新（応援（入）はKV最新を優先）
+  // 自店データ更新（応援（入）はKV最新を優先、公休はマスターの編集内容を優先）
   const latestMasterSupIn = (latestMasterMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey);
-  const latestMasterHolidays = latestMasterMonth?.[dateKey]?.holidays ?? shiftData[storeKey][ym][dateKey]?.holidays ?? [];
   if (!shiftData[storeKey][ym][dateKey]) shiftData[storeKey][ym][dateKey] = { holidays: [], supports: [] };
   shiftData[storeKey][ym][dateKey].supports = [
     ...masterSheetDraft.supports.filter(s => s.from === storeKey),
     ...latestMasterSupIn
   ];
-  shiftData[storeKey][ym][dateKey].holidays = latestMasterHolidays;
+  shiftData[storeKey][ym][dateKey].holidays = masterSheetDraft.holidays ?? [];
   await saveShiftData(storeKey, ym);
 
   closeSheet();
@@ -2237,8 +2335,8 @@ function renderStaffMgmt() {
           </div>
           <div style="padding:12px 16px;">
             <div style="font-size:13px;font-weight:700;color:var(--text-sub);margin-bottom:10px;">特別休業日（お正月・お盆等）</div>
-            <p style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">YYYY-MM-DD形式で入力（例：2026-08-13）</p>
-            <input class="input-field" id="special-close-date" type="text" placeholder="2026-08-13">
+            <p style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">数字8桁で入力（例：20260813）</p>
+            <input class="input-field" id="special-close-date" type="text" inputmode="numeric" placeholder="20260813">
             <button class="btn-primary" onclick="addSpecialClosed()">追加</button>
             <div style="margin-top:10px;">
               ${(sd.specialClosedDates ?? []).map(d => `
@@ -2521,8 +2619,14 @@ async function saveClosedDow() {
 }
 
 async function addSpecialClosed() {
-  const val = document.getElementById('special-close-date').value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) { showToast('YYYY-MM-DD形式で入力してください'); return; }
+  const raw = document.getElementById('special-close-date').value.trim();
+  // ハイフンなし（20260815）でもハイフンあり（2026-08-15）でも受け付ける
+  const digits = raw.replace(/[^0-9]/g, '');
+  let val = raw;
+  if (/^\d{8}$/.test(digits)) {
+    val = `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) { showToast('日付を正しく入力してください（例：20260815）'); return; }
   if (!staffData[staffMgmtStore]) staffData[staffMgmtStore] = { staff: [], minStaff: 5 };
   if (!staffData[staffMgmtStore].specialClosedDates) staffData[staffMgmtStore].specialClosedDates = [];
   if (!staffData[staffMgmtStore].specialClosedDates.includes(val)) {
