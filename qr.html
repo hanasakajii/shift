@@ -13,7 +13,10 @@
   .card {
     background: #fff; border-radius: 12px; padding: 16px;
     text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    display: block; text-decoration: none; color: inherit;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.06);
   }
+  .card:active { background: #fafaf8; }
   .card-name { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
   .card-url { font-size: 10px; color: #888; margin-top: 10px; word-break: break-all; }
   .master { border: 2px solid #1a1a1a; }
@@ -54,7 +57,10 @@ const grid = document.getElementById('grid');
 
 STORES.forEach(store => {
   const url = BASE + store.key + '.html';
-  const card = document.createElement('div');
+  const card = document.createElement('a');
+  card.href = url;
+  card.target = '_blank';
+  card.rel = 'noopener';
   card.className = 'card' + (store.key === 'master' ? ' master' : '');
 
   const name = document.createElement('div');
