@@ -1360,14 +1360,14 @@ async function refreshCurrentData() {
 // 月の行数が変わるタイミング（例：5週→6週）で顕著なため、
 // 強制的に再描画（レイヤーの作り直し）をかける。
 function forceRepaintCalUpper() {
-  const el = document.getElementById('cal-upper');
-  if (!el) return;
-  el.style.webkitOverflowScrolling = 'auto';
-  el.scrollTop = el.scrollTop + 1;
-  requestAnimationFrame(() => {
-    el.scrollTop = el.scrollTop - 1;
-    el.style.webkitOverflowScrolling = 'touch';
-  });
+  const wrapper = document.getElementById('cal-wrapper');
+  if (!wrapper) return;
+  // iOS Safariでスクロール領域の中身をJSで書き換えた際、
+  // 古い描画レイヤーがそのまま残ることがあるための対策。
+  // 一瞬非表示にしてから戻すことで、描画レイヤーを作り直させる。
+  wrapper.style.display = 'none';
+  void wrapper.offsetHeight; // 強制リフロー
+  wrapper.style.display = '';
 }
 
 async function changeMonth(delta) {
@@ -3130,4 +3130,3 @@ init();
 </script>
 </body>
 </html>
-
