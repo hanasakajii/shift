@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>シフト管理</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="icon.png">
   <link rel="manifest" href="/shift/manifest-master.json" id="manifest-link">
 <style>
@@ -740,8 +741,27 @@ async function init() {
 
 function updateManifest() {
   const key = isMaster ? 'master' : currentStore.key;
-  const link = document.getElementById('manifest-link');
-  if (link) link.href = `/shift/manifest-${key}.json`;
+  const name = isMaster ? 'マスター' : currentStore.name;
+
+  // <link rel="manifest"> はhref属性の書き換えだけだとiOS Safariの
+  // 「ホーム画面に追加」に反映されないことがあるため、要素ごと作り直す
+  const oldLink = document.getElementById('manifest-link');
+  if (oldLink) oldLink.remove();
+  const newLink = document.createElement('link');
+  newLink.rel = 'manifest';
+  newLink.id = 'manifest-link';
+  newLink.href = `/shift/manifest-${key}.json`;
+  document.head.appendChild(newLink);
+
+  // apple-mobile-web-app-title も同様に作り直す
+  let titleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (titleMeta) titleMeta.remove();
+  titleMeta = document.createElement('meta');
+  titleMeta.name = 'apple-mobile-web-app-title';
+  titleMeta.content = name;
+  document.head.appendChild(titleMeta);
+
+  document.title = `AOBA ${name}`;
 }
 
 function renderHeader() {
@@ -3091,4 +3111,3 @@ init();
 </script>
 </body>
 </html>
-
