@@ -1880,7 +1880,7 @@ function renderSheetBody() {
   const gaikinReasonInputs = gaikinList.map((g, i) => `
     <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
       <span style="font-size:13px;font-weight:600;flex-shrink:0;width:64px;">${g.name}</span>
-      <input type="text" class="input-field" style="flex:1;padding:8px 10px;font-size:13px;" placeholder="理由（例：事務所、店周り、スクーリング）" value="${(g.reason||'').replace(/"/g,'&quot;')}" oninput="updateGaikinReason(${i}, this.value)">
+      <input type="text" class="input-field" style="flex:1;padding:8px 10px;font-size:16px;" placeholder="理由（例：事務所、店周り、スクーリング）" value="${(g.reason||'').replace(/"/g,'&quot;')}" oninput="updateGaikinReason(${i}, this.value)">
     </div>
   `).join('');
 
@@ -2462,7 +2462,7 @@ function renderMasterSheetBody() {
   const gaikinReasonInputs = gaikinDraft.map((g, i) => `
     <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
       <span style="font-size:13px;font-weight:600;flex-shrink:0;width:64px;">${g.name}</span>
-      <input type="text" class="input-field" style="flex:1;padding:8px 10px;font-size:13px;" placeholder="理由（例：事務所、店周り、スクーリング）" value="${(g.reason||'').replace(/"/g,'&quot;')}" oninput="updateMasterGaikinReason(${i}, this.value)">
+      <input type="text" class="input-field" style="flex:1;padding:8px 10px;font-size:16px;" placeholder="理由（例：事務所、店周り、スクーリング）" value="${(g.reason||'').replace(/"/g,'&quot;')}" oninput="updateMasterGaikinReason(${i}, this.value)">
     </div>
   `).join('');
 
