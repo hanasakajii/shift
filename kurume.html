@@ -13,6 +13,10 @@
 </style>
 </head>
 <body>
-<iframe src="/shift/app.html#kurume"></iframe>
+<iframe id="app-frame"></iframe>
+<script>
+  // app.html は毎回タイムスタンプ付きで読み込み、常に最新版を取得する
+  document.getElementById("app-frame").src = "/shift/app.html?v=" + Date.now() + "#kurume";
+</script>
 </body>
 </html>
