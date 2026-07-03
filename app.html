@@ -152,6 +152,8 @@
   }
   .tag-holiday { background: #f0f0ee; color: var(--text); }
   .tag-absence { background: #fdeaea; color: var(--danger); font-weight: 700; }
+  .tag-gaikin { background: #eaf1fd; color: #2f5fbf; font-weight: 600; }
+  .name-chip.selected-gaikin { background: #2f5fbf; color: #fff; border-color: #2f5fbf; }
   .tag-out { background: #fde8e8; color: var(--support-out); }
   .tag-in { background: #e8f2fb; color: var(--support-in); }
 
@@ -692,8 +694,8 @@ let staffData = {}; // staffData[storeKey] = { staff:[], minStaff:5 }
 let updateLog = []; // [{store, time, text}]
 
 let sheetDate = null;
-let sheetSection = 'all'; // 'holiday' | 'support' | 'absence' | 'all'
-let sheetDraft = { holidays: [], supports: [], absences: [] };
+let sheetSection = 'all'; // 'holiday' | 'support' | 'absence' | 'gaikin' | 'all'
+let sheetDraft = { holidays: [], supports: [], absences: [], gaikin: [] };
 let calViewMode = 'month'; // 'month' | 'week'
 let weekOffset = 0; // 週表示時のオフセット（0=今週）
 
@@ -1231,15 +1233,19 @@ async function renderCalCellsWeek(store, ym) {
 
     const holidays = dayData.holidays ?? [];
     const absences = dayData.absences ?? [];
+    const gaikin = dayData.gaikin ?? [];
     const supports = dayData.supports ?? [];
     const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
     const holidayPart = holidays.filter(n => partList.includes(n)).length;
     const absenceSeishain = absences.filter(n => seishainList.includes(n)).length;
     const absencePart = absences.filter(n => partList.includes(n)).length;
+    const gaikinNames = gaikin.map(g => g.name);
+    const gaikinSeishain = gaikinNames.filter(n => seishainList.includes(n)).length;
+    const gaikinPart = gaikinNames.filter(n => partList.includes(n)).length;
     const supOutCount = supports.filter(s => s.from === store.key).length;
     const supInCount = supports.filter(s => s.to === store.key).length;
-    const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - supOutCount + supInCount;
-    const presentPart = partList.length - holidayPart - absencePart;
+    const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - gaikinSeishain - supOutCount + supInCount;
+    const presentPart = partList.length - holidayPart - absencePart - gaikinPart;
     const countClass = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
     const countLabel = partList.length > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}人`;
 
@@ -1248,6 +1254,7 @@ async function renderCalCellsWeek(store, ym) {
       ...(isClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
       ...holidays.map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...absences.map(n => `<span class="cal-tag tag-absence">${n}（欠勤）</span>`),
+      ...gaikin.map(g => `<span class="cal-tag tag-gaikin">${g.reason ? `${g.name}（${g.reason}）` : `${g.name}（外勤）`}</span>`),
       ...supports.filter(s => s.from === store.key).map(s => {
         const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
@@ -1297,14 +1304,18 @@ function renderCalCells(store, ym) {
     const holidayName = getJPHolidayName(key);
     const holidays = dayData.holidays ?? [];
     const absences = dayData.absences ?? [];
+    const gaikin = dayData.gaikin ?? [];
     const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
     const holidayPart = holidays.filter(n => partList.includes(n)).length;
     const absenceSeishain = absences.filter(n => seishainList.includes(n)).length;
     const absencePart = absences.filter(n => partList.includes(n)).length;
+    const gaikinNames = gaikin.map(g => g.name);
+    const gaikinSeishain = gaikinNames.filter(n => seishainList.includes(n)).length;
+    const gaikinPart = gaikinNames.filter(n => partList.includes(n)).length;
     const supOutCount = dayData.supports?.filter(s => s.from === store.key).length ?? 0;
     const supInCount = dayData.supports?.filter(s => s.to === store.key).length ?? 0;
-    const presentSeishain = totalSeishain - holidaySeishain - absenceSeishain - supOutCount + supInCount;
-    const presentPart = totalPart - holidayPart - absencePart;
+    const presentSeishain = totalSeishain - holidaySeishain - absenceSeishain - gaikinSeishain - supOutCount + supInCount;
+    const presentPart = totalPart - holidayPart - absencePart - gaikinPart;
     const countClass = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
     const countLabel = totalPart > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}人`;
 
@@ -1319,6 +1330,7 @@ function renderCalCells(store, ym) {
       ...(isCalClosed ? ['<span class="cal-tag" style="background:#f0f0ee;color:var(--text-sub);">定休日</span>'] : []),
       ...(dayData.holidays ?? []).slice(0,2).map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...(dayData.absences ?? []).slice(0,2).map(n => `<span class="cal-tag tag-absence">${n}（欠勤）</span>`),
+      ...gaikin.slice(0,2).map(g => `<span class="cal-tag tag-gaikin">${g.reason ? `${g.name}（${g.reason}）` : `${g.name}（外勤）`}</span>`),
       ...(dayData.supports ?? []).filter(s => s.from === store.key).slice(0,1).map(s => {
         const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
@@ -1425,13 +1437,14 @@ function openSheet(storeKey, dateKey) {
   if (isMaster) { openMasterSheet(storeKey, dateKey); return; }
 
   const ym = dateKey.slice(0, 7);
-  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [] };
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [], gaikin: [] };
   sheetDate = { storeKey, dateKey, ym };
   sheetSection = 'all';
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
     supports: structuredClone(dayData.supports ?? []),
-    absences: [...(dayData.absences ?? [])]
+    absences: [...(dayData.absences ?? [])],
+    gaikin: structuredClone(dayData.gaikin ?? [])
   };
 
   const [y, m, d] = dateKey.split('-');
@@ -1453,6 +1466,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? {};
   const holidays = dayData.holidays ?? [];
   const absences = dayData.absences ?? [];
+  const gaikin = dayData.gaikin ?? [];
   const supports = dayData.supports ?? [];
   const supOut = supports.filter(s => s.from === storeKey);
   const supIn = supports.filter(s => s.to === storeKey);
@@ -1464,6 +1478,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const editFnHoliday = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','holiday')` : `openFullSheet('${storeKey}','${dateKey}','holiday')`;
   const editFnSupport = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','support')` : `openFullSheet('${storeKey}','${dateKey}','support')`;
   const editFnAbsence = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','absence')` : `openFullSheet('${storeKey}','${dateKey}','absence')`;
+  const editFnGaikin = ismaster ? `openMasterSheet('${storeKey}','${dateKey}','gaikin')` : `openFullSheet('${storeKey}','${dateKey}','gaikin')`;
   const pendingRequests = supOut.filter(s => s.type === 'count' && !s.name);
 
   let html = `<div class="day-detail-header">
@@ -1592,6 +1607,44 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       <button class="day-detail-add-btn" onclick="${editFnAbsence}">＋</button>
     </div>`;
   }
+
+  // 外勤セクション
+  if (!ismaster) {
+    if (gaikin.length > 0) {
+      gaikin.forEach((g, i) => {
+        const label = g.reason ? `${g.name}（${g.reason}）` : g.name;
+        html += `<div class="swipe-row" id="swipe-gaikin-${i}" ontouchstart="swipeStart(this,event)" ontouchmove="swipeMove(this,event)" ontouchend="swipeEnd(this,event)">
+          <div class="swipe-row-inner">
+            <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">外勤</div>
+            <span class="cal-tag tag-gaikin" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>
+            <span style="flex:1;"></span>
+            <button class="day-detail-add-btn" onclick="${editFnGaikin}">＋</button>
+          </div>
+          <button class="swipe-delete-btn" onclick="deleteGaikinFromDetail('${storeKey}','${dateKey}','${g.name}')">削除</button>
+        </div>`;
+      });
+    } else {
+      html += `<div class="day-detail-item day-detail-section-row">
+        <div class="day-detail-label" style="margin-bottom:0;">外勤</div>
+        <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
+        <button class="day-detail-add-btn" onclick="${editFnGaikin}">＋</button>
+      </div>`;
+    }
+  } else if (gaikin.length > 0) {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">外勤</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${gaikin.map(g=>`<span class="cal-tag tag-gaikin" style="font-size:12px;padding:4px 8px;display:inline-block;">${g.reason ? `${g.name}（${g.reason}）` : g.name}</span>`).join('')}
+      </div>
+      <button class="day-detail-add-btn" onclick="${editFnGaikin}">＋</button>
+    </div>`;
+  } else {
+    html += `<div class="day-detail-item day-detail-section-row">
+      <div class="day-detail-label" style="margin-bottom:0;">外勤</div>
+      <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
+      <button class="day-detail-add-btn" onclick="${editFnGaikin}">＋</button>
+    </div>`;
+  }
   return html;
 }
 
@@ -1716,6 +1769,17 @@ async function deleteAbsenceFromDetail(storeKey, dateKey, name) {
   setTimeout(() => showDayDetail(storeKey, dateKey, false), 50);
 }
 
+async function deleteGaikinFromDetail(storeKey, dateKey, name) {
+  const ym = dateKey.slice(0,7);
+  if (!shiftData[storeKey]?.[ym]?.[dateKey]) return;
+  shiftData[storeKey][ym][dateKey].gaikin = (shiftData[storeKey][ym][dateKey].gaikin ?? []).filter(g => g.name !== name);
+  await saveShiftData(storeKey, ym);
+  showToast(`${name}の外勤を削除しました`);
+  showDayDetail(storeKey, dateKey, false);
+  renderCalendarPage();
+  setTimeout(() => showDayDetail(storeKey, dateKey, false), 50);
+}
+
 async function deleteSupportFromDetail(storeKey, dateKey, idx, ismaster) {
   const ym = dateKey.slice(0,7);
   if (!shiftData[storeKey]?.[ym]?.[dateKey]) return;
@@ -1759,17 +1823,18 @@ function openDayDetail(storeKey, dateKey) {
 function openFullSheet(storeKey, dateKey, section) {
   // 通常のボトムシートを開く
   const ym = dateKey.slice(0, 7);
-  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [] };
+  const dayData = shiftData[storeKey]?.[ym]?.[dateKey] ?? { holidays: [], supports: [], absences: [], gaikin: [] };
   sheetDate = { storeKey, dateKey, ym };
   sheetSection = section || 'all';
   sheetDraft = {
     holidays: [...(dayData.holidays ?? [])],
     supports: structuredClone(dayData.supports ?? []),
-    absences: [...(dayData.absences ?? [])]
+    absences: [...(dayData.absences ?? [])],
+    gaikin: structuredClone(dayData.gaikin ?? [])
   };
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
-  const sectionLabel = { holiday: '公休', support: '応援', absence: '欠勤', all: '' }[sheetSection];
+  const sectionLabel = { holiday: '公休', support: '応援', absence: '欠勤', gaikin: '外勤', all: '' }[sheetSection];
   document.getElementById('sheet-title').textContent = `${+m}月${+d}日（${dow}）`;
   document.getElementById('sheet-subtitle').textContent = sectionLabel ? `${currentStore.name}・${sectionLabel}` : currentStore.name;
   renderSheetBody();
@@ -1805,6 +1870,19 @@ function renderSheetBody() {
     const sel = (sheetDraft.absences ?? []).includes(name);
     return `<button class="name-chip ${sel ? 'selected-absence' : ''}" data-action="absence" data-name="${name.replace(/"/g,'&quot;')}">${name}</button>`;
   }).join('');
+
+  // 外勤チップ + 理由入力
+  const gaikinList = sheetDraft.gaikin ?? [];
+  const gaikinChips = staffNames.map(name => {
+    const sel = gaikinList.some(g => g.name === name);
+    return `<button class="name-chip ${sel ? 'selected-gaikin' : ''}" data-action="gaikin" data-name="${name.replace(/"/g,'&quot;')}">${name}</button>`;
+  }).join('');
+  const gaikinReasonInputs = gaikinList.map((g, i) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+      <span style="font-size:13px;font-weight:600;flex-shrink:0;width:64px;">${g.name}</span>
+      <input type="text" class="input-field" style="flex:1;padding:8px 10px;font-size:13px;" placeholder="理由（例：事務所、店周り、スクーリング）" value="${(g.reason||'').replace(/"/g,'&quot;')}" oninput="updateGaikinReason(${i}, this.value)">
+    </div>
+  `).join('');
 
   // 応援（出）詳細（pending中のcount型＝名前未確定は除外）
   const outDetails = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && !(s.type === 'count' && !s.name)).map((s, i) => `
@@ -1853,6 +1931,7 @@ function renderSheetBody() {
   const showHoliday = sheetSection === 'all' || sheetSection === 'holiday';
   const showSupport = sheetSection === 'all' || sheetSection === 'support';
   const showAbsence = sheetSection === 'all' || sheetSection === 'absence';
+  const showGaikin = sheetSection === 'all' || sheetSection === 'gaikin';
 
   // 古いイベントリスナーを完全削除してから再生成
   const oldSheetBody = document.getElementById('sheet-body');
@@ -1878,6 +1957,12 @@ function renderSheetBody() {
       <div class="sheet-section-label">欠勤</div>
       <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
     ` : ''}
+
+    ${showGaikin ? `
+      <div class="sheet-section-label">外勤</div>
+      <div class="name-chips">${gaikinChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+      ${gaikinReasonInputs}
+    ` : ''}
   `;
 
   // イベント委譲: data-action でハンドリング
@@ -1890,6 +1975,7 @@ function renderSheetBody() {
     else if (action === 'support-out') toggleSupportOut(name);
     else if (action === 'pending') selectPendingStaff(parseInt(btn.dataset.idx), name);
     else if (action === 'absence') toggleAbsence(name);
+    else if (action === 'gaikin') toggleGaikin(name);
   };
 }
 
@@ -1912,6 +1998,21 @@ function toggleAbsence(name) {
     sheetDraft.absences.push(name);
   }
   renderSheetBody();
+}
+
+function toggleGaikin(name) {
+  if (!sheetDraft.gaikin) sheetDraft.gaikin = [];
+  if (sheetDraft.gaikin.some(g => g.name === name)) {
+    sheetDraft.gaikin = sheetDraft.gaikin.filter(g => g.name !== name);
+  } else {
+    sheetDraft.gaikin.push({ name, reason: '' });
+  }
+  renderSheetBody();
+}
+
+function updateGaikinReason(idx, value) {
+  if (!sheetDraft.gaikin?.[idx]) return;
+  sheetDraft.gaikin[idx].reason = value;
 }
 
 function toggleSupportOut(name) {
@@ -2031,6 +2132,7 @@ async function saveSheet() {
   shiftData[storeKey][ym][dateKey] = {
     holidays: sheetDraft.holidays,
     absences: sheetDraft.absences ?? [],
+    gaikin: sheetDraft.gaikin ?? [],
     supports: [
       ...normalizedSupports,
       ...latestSupIn
@@ -2166,15 +2268,19 @@ function renderDashboard() {
       const dayData = shiftData[store.key]?.[ym]?.[dateKey] ?? {};
       const holidays = dayData.holidays ?? [];
       const absences = dayData.absences ?? [];
+      const gaikin = dayData.gaikin ?? [];
       const supports = dayData.supports ?? [];
       const holidaySeishain = holidays.filter(n => seishainList.includes(n)).length;
       const holidayPart = holidays.filter(n => partList.includes(n)).length;
       const absenceSeishain = absences.filter(n => seishainList.includes(n)).length;
       const absencePart = absences.filter(n => partList.includes(n)).length;
+      const gaikinNames = gaikin.map(g => g.name);
+      const gaikinSeishain = gaikinNames.filter(n => seishainList.includes(n)).length;
+      const gaikinPart = gaikinNames.filter(n => partList.includes(n)).length;
       const supOut = supports.filter(s => s.from === store.key).length;
       const supIn = supports.filter(s => s.to === store.key).length;
-      const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - supOut + supIn;
-      const presentPart = partList.length - holidayPart - absencePart;
+      const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - gaikinSeishain - supOut + supIn;
+      const presentPart = partList.length - holidayPart - absencePart - gaikinPart;
       const cls = presentSeishain < minStaff ? 'count-danger' : presentSeishain === minStaff ? 'count-warn' : 'count-ok';
       const label = partList.length > 0 ? `${presentSeishain}+${presentPart}` : `${presentSeishain}`;
       // 定休日チェック（storeSettings優先、なければSTORESデフォルト）
@@ -2291,8 +2397,8 @@ function selectDashArea(name) {
 // MASTER SHEET（マスターからの応援設定）
 // ============================================================
 let masterSheetDate = null;
-let masterSheetSection = 'all'; // 'holiday' | 'support' | 'absence' | 'all'
-let masterSheetDraft = { supports: [], holidays: [], absences: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
+let masterSheetSection = 'all'; // 'holiday' | 'support' | 'absence' | 'gaikin' | 'all'
+let masterSheetDraft = { supports: [], holidays: [], absences: [], gaikin: [] }; // {type:'name'|'count', name?:'', count?:1, from:'', to:''}
 
 async function openMasterSheet(storeKey, dateKey, section) {
   const ym = dateKey.slice(0, 7);
@@ -2307,13 +2413,14 @@ async function openMasterSheet(storeKey, dateKey, section) {
   masterSheetDraft = {
     supports: structuredClone(dayData.supports ?? []),
     holidays: structuredClone(dayData.holidays ?? []),
-    absences: structuredClone(dayData.absences ?? [])
+    absences: structuredClone(dayData.absences ?? []),
+    gaikin: structuredClone(dayData.gaikin ?? [])
   };
 
   const [y, m, d] = dateKey.split('-');
   const dow = ['日','月','火','水','木','金','土'][new Date(+y, +m-1, +d).getDay()];
   const storeName = STORE_MAP[storeKey]?.name??storeKey;
-  const sectionLabel = { holiday: '公休設定', support: '応援設定', absence: '欠勤設定', all: '公休・応援設定' }[masterSheetSection];
+  const sectionLabel = { holiday: '公休設定', support: '応援設定', absence: '欠勤設定', gaikin: '外勤設定', all: '公休・応援設定' }[masterSheetSection];
   document.getElementById('sheet-title').textContent = `${storeName} ${+m}月${+d}日（${dow}）`;
   document.getElementById('sheet-subtitle').textContent = `マスター ${sectionLabel}`;
   renderMasterSheetBody();
@@ -2345,6 +2452,19 @@ function renderMasterSheetBody() {
     const sel = absencesDraft.includes(name);
     return `<button class="name-chip ${sel ? 'selected-absence' : ''}" onclick="toggleMasterAbsence('${name.replace(/"/g,'&quot;')}')">${name}</button>`;
   }).join('');
+
+  // 外勤（マスターから編集可能）
+  const gaikinDraft = masterSheetDraft.gaikin ?? [];
+  const gaikinChips = staffNames.map(name => {
+    const sel = gaikinDraft.some(g => g.name === name);
+    return `<button class="name-chip ${sel ? 'selected-gaikin' : ''}" onclick="toggleMasterGaikin('${name.replace(/"/g,'&quot;')}')">${name}</button>`;
+  }).join('');
+  const gaikinReasonInputs = gaikinDraft.map((g, i) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+      <span style="font-size:13px;font-weight:600;flex-shrink:0;width:64px;">${g.name}</span>
+      <input type="text" class="input-field" style="flex:1;padding:8px 10px;font-size:13px;" placeholder="理由（例：事務所、店周り、スクーリング）" value="${(g.reason||'').replace(/"/g,'&quot;')}" oninput="updateMasterGaikinReason(${i}, this.value)">
+    </div>
+  `).join('');
 
   // 応援設定リスト
   const supportsOut = masterSheetDraft.supports.filter(s => s.from === storeKey);
@@ -2408,12 +2528,15 @@ function renderMasterSheetBody() {
   const hasData = (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.supports ?? []).length > 0
     || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.holidays ?? []).length > 0
     || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.absences ?? []).length > 0
+    || (shiftData[masterSheetDate.storeKey]?.[masterSheetDate.ym]?.[masterSheetDate.dateKey]?.gaikin ?? []).length > 0
     || holidaysDraft.length > 0
-    || absencesDraft.length > 0;
+    || absencesDraft.length > 0
+    || gaikinDraft.length > 0;
 
   const showHoliday = masterSheetSection === 'all' || masterSheetSection === 'holiday';
   const showSupport = masterSheetSection === 'all' || masterSheetSection === 'support';
   const showAbsence = masterSheetSection === 'all' || masterSheetSection === 'absence';
+  const showGaikin = masterSheetSection === 'all' || masterSheetSection === 'gaikin';
 
   document.getElementById('sheet-body').innerHTML = `
     ${showHoliday ? `
@@ -2438,6 +2561,12 @@ function renderMasterSheetBody() {
     ${showAbsence ? `
       <div class="sheet-section-label">欠勤</div>
       <div class="name-chips">${absenceChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+    ` : ''}
+
+    ${showGaikin ? `
+      <div class="sheet-section-label">外勤</div>
+      <div class="name-chips">${gaikinChips || '<span style="color:var(--text-sub);font-size:13px;">スタッフ未登録</span>'}</div>
+      ${gaikinReasonInputs}
     ` : ''}
 
     ${hasData ? `
@@ -2520,6 +2649,21 @@ function toggleMasterAbsence(name) {
   renderMasterSheetBody();
 }
 
+function toggleMasterGaikin(name) {
+  if (!masterSheetDraft.gaikin) masterSheetDraft.gaikin = [];
+  if (masterSheetDraft.gaikin.some(g => g.name === name)) {
+    masterSheetDraft.gaikin = masterSheetDraft.gaikin.filter(g => g.name !== name);
+  } else {
+    masterSheetDraft.gaikin.push({ name, reason: '' });
+  }
+  renderMasterSheetBody();
+}
+
+function updateMasterGaikinReason(idx, value) {
+  if (!masterSheetDraft.gaikin?.[idx]) return;
+  masterSheetDraft.gaikin[idx].reason = value;
+}
+
 async function saveMasterSheet() {
   const { storeKey, dateKey, ym } = masterSheetDate;
   const invalid = masterSheetDraft.supports.filter(s => s.from === storeKey && !s.to);
@@ -2577,6 +2721,7 @@ async function saveMasterSheet() {
   ];
   shiftData[storeKey][ym][dateKey].holidays = masterSheetDraft.holidays ?? [];
   shiftData[storeKey][ym][dateKey].absences = masterSheetDraft.absences ?? [];
+  shiftData[storeKey][ym][dateKey].gaikin = masterSheetDraft.gaikin ?? [];
   await saveShiftData(storeKey, ym);
 
   closeSheet();
