@@ -51,7 +51,7 @@
     background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
     padding: 4px 10px; border-radius: 20px; letter-spacing: 0.3px;
   }
-  #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 12px); }
+  #content { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(var(--tab-h) + 12px); }
   #pull-refresh-indicator {
     position: fixed;
     left: 0; right: 0;
@@ -71,7 +71,7 @@
   }
   #pull-refresh-indicator.spinning .pull-spinner { animation: pull-spin 0.7s linear infinite; }
   @keyframes pull-spin { to { transform: rotate(360deg); } }
-  #content.calendar-mode { padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); overflow: hidden; }
+  #content.calendar-mode { padding-bottom: var(--tab-h); overflow: hidden; }
   #tab-bar {
     height: var(--tab-h); background: var(--card); border-top: 1px solid var(--border);
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
