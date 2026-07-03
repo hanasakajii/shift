@@ -1084,15 +1084,20 @@ function computeStaffLeaveStats(storeKey, ym) {
   const sd = staffData[storeKey] ?? { staff: [] };
   const staffList = sd.staff ?? [];
   const closedDow = sd.closedDow ?? STORE_MAP[storeKey]?.closedDow ?? [];
+  const specialClosed = sd.specialClosedDates ?? [];
 
   // 公休（週の定休日回数＝その月の定休日該当日数）
   let regularCount = 0;
+  // 特別休業日（お盆・正月等）のうち、この月に該当する日数
+  let specialCount = 0;
   for (let d = 1; d <= lastDate; d++) {
+    const key = `${ym}-${String(d).padStart(2,'0')}`;
     const dow = new Date(y, m - 1, d).getDay();
     if (closedDow.includes(dow)) regularCount++;
+    if (specialClosed.includes(key)) specialCount++;
   }
 
-  // 有給（カレンダーに名前が入っている日数＝holidays配列の登場回数）
+  // 有給（カレンダーに名前が入っている日数＋特別休業日の日数）
   const paidMap = {};
   const monthData = shiftData[storeKey]?.[ym] ?? {};
   for (let d = 1; d <= lastDate; d++) {
@@ -1104,10 +1109,11 @@ function computeStaffLeaveStats(storeKey, ym) {
   return staffList.map(s => {
     const isPart = s.type === 'part';
     if (isPart) {
-      // パートは有給の概念なし。定休日回数＋カレンダー上の休み日数をすべて公休として計上
-      return { name: s.name, isPart: true, paid: 0, regular: regularCount + (paidMap[s.name] ?? 0) };
+      // パートは有給の概念なし。定休日回数＋カレンダー上の休み日数＋特別休業日をすべて公休として計上
+      return { name: s.name, isPart: true, paid: 0, regular: regularCount + (paidMap[s.name] ?? 0) + specialCount };
     }
-    return { name: s.name, isPart: false, paid: paidMap[s.name] ?? 0, regular: regularCount };
+    // 正社員：特別休業日は有給として上乗せ
+    return { name: s.name, isPart: false, paid: (paidMap[s.name] ?? 0) + specialCount, regular: regularCount };
   });
 }
 
