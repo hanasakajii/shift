@@ -1150,6 +1150,7 @@ async function selectMasterStore(key) {
   if (!shiftData[key]) shiftData[key] = {};
   shiftData[key][ym] = (d && typeof d === 'object') ? d : {};
   renderCalendarPage();
+  forceRepaintCalUpper();
   requestAnimationFrame(() => {
     const newTabsEl = document.querySelector('.store-tabs');
     if (newTabsEl) newTabsEl.scrollLeft = scrollLeft;
@@ -1193,6 +1194,7 @@ function changeWeek(delta) {
   currentYear = dates[3].getFullYear(); // 水曜日基準
   currentMonth = dates[3].getMonth() + 1;
   renderCalendarPage();
+  forceRepaintCalUpper();
 }
 
 async function renderCalCellsWeek(store, ym) {
@@ -1358,6 +1360,21 @@ async function refreshCurrentData() {
   }
 }
 
+// iOS Safariでは、-webkit-overflow-scrolling:touch を使った要素の中身を
+// スクロール操作なしでJSから書き換えると、古い描画がそのまま残ることがある。
+// 月の行数が変わるタイミング（例：5週→6週）で顕著なため、
+// 強制的に再描画（レイヤーの作り直し）をかける。
+function forceRepaintCalUpper() {
+  const el = document.getElementById('cal-upper');
+  if (!el) return;
+  el.style.webkitOverflowScrolling = 'auto';
+  el.scrollTop = el.scrollTop + 1;
+  requestAnimationFrame(() => {
+    el.scrollTop = el.scrollTop - 1;
+    el.style.webkitOverflowScrolling = 'touch';
+  });
+}
+
 async function changeMonth(delta) {
   currentMonth += delta;
   if (currentMonth > 12) { currentMonth = 1; currentYear++; }
@@ -1372,6 +1389,7 @@ async function changeMonth(delta) {
     }
   }
   renderCalendarPage();
+  forceRepaintCalUpper();
   // 表示後に隣月を裏で先読み
   prefetchAdjacentMonths();
 }
