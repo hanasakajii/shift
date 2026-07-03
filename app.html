@@ -1094,6 +1094,7 @@ function computeStaffLeaveStats(storeKey, ym) {
 function renderLeaveSummary(store, ym) {
   const el = document.getElementById('leave-summary');
   if (!el) return;
+  if (!isMaster) { el.innerHTML = ''; return; }
   const stats = computeStaffLeaveStats(store.key, ym);
   if (stats.length === 0) { el.innerHTML = ''; return; }
   const [, mm] = ym.split('-');
