@@ -179,7 +179,7 @@
     flex-direction: column;
   }
 
-  #cal-upper > div:last-child {
+  #cal-upper > .cal-body-wrap {
     flex: 1;
     min-height: 0;
     display: flex;
@@ -1057,7 +1057,7 @@ async function renderCalendarPage() {
           </div>
         </div>
         ${storeSelector}
-        <div style="background:var(--card); border-bottom:1px solid var(--border);">
+        <div class="cal-body-wrap" style="background:var(--card); border-bottom:1px solid var(--border);">
           <div class="cal-grid">
             ${['日','月','火','水','木','金','土'].map(d => `<div class="cal-dow">${d}</div>`).join('')}
           </div>
