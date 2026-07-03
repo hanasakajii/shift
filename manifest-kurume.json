@@ -1,7 +1,7 @@
 {
   "name": "AOBA 久留米",
   "short_name": "久留米",
-  "start_url": "/shift/#kurume",
+  "start_url": "/shift/kurume.html",
   "display": "standalone",
   "background_color": "#f5f5f3",
   "theme_color": "#1a1a1a",

@@ -1,7 +1,7 @@
 {
   "name": "AOBA 八女理容",
   "short_name": "八女理容",
-  "start_url": "/shift/#yame",
+  "start_url": "/shift/yame.html",
   "display": "standalone",
   "background_color": "#f5f5f3",
   "theme_color": "#1a1a1a",

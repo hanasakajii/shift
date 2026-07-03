@@ -1,7 +1,7 @@
 {
   "name": "AOBA 新栄町",
   "short_name": "新栄町",
-  "start_url": "/shift/#shinsakae",
+  "start_url": "/shift/shinsakae.html",
   "display": "standalone",
   "background_color": "#f5f5f3",
   "theme_color": "#1a1a1a",
