@@ -56,9 +56,11 @@ const STORES = [
 const grid = document.getElementById('grid');
 
 STORES.forEach(store => {
+  const cacheBust = 'v=' + Date.now();
   const url = BASE + store.key + '.html';
+  const linkUrl = url + '?' + cacheBust;
   const card = document.createElement('a');
-  card.href = url;
+  card.href = linkUrl;
   card.target = '_blank';
   card.rel = 'noopener';
   card.className = 'card' + (store.key === 'master' ? ' master' : '');
