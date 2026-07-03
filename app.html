@@ -175,15 +175,10 @@
     min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    display: flex;
-    flex-direction: column;
   }
 
   #cal-upper > .cal-body-wrap {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    /* 通常のブロック要素として積み重ねる（flexを使わない） */
   }
   #cal-cells {
     display: grid !important;
