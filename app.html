@@ -1847,7 +1847,6 @@ function openFullSheet(storeKey, dateKey, section) {
 
 function renderSheetBody() {
   const staff = staffData[sheetDate.storeKey]?.staff ?? [];
-  const otherStores = STORES.filter(s => s.key !== sheetDate.storeKey);
 
   // 公休チップ（スタッフがオブジェクト形式の場合も対応）
   const staffNames = staff.map(s => typeof s === 'string' ? s : s.name);
@@ -1885,7 +1884,11 @@ function renderSheetBody() {
   `).join('');
 
   // 応援（出）詳細（pending中のcount型＝名前未確定は除外）
-  const outDetails = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && !(s.type === 'count' && !s.name)).map((s, i) => `
+  const outDetails = sheetDraft.supports.filter(s => s.from === sheetDate.storeKey && !(s.type === 'count' && !s.name)).map((s, i) => {
+    const person = staff.find(p => (typeof p === 'string' ? p : p.name) === s.name);
+    const isFreeStaff = typeof person === 'object' && person.type === 'free';
+    const storeOptions = isFreeStaff ? STORES : STORES.filter(st => st.key !== sheetDate.storeKey);
+    return `
     <div class="support-item">
       <div class="support-item-header">
         <span class="support-item-name">${s.name}</span>
@@ -1894,10 +1897,11 @@ function renderSheetBody() {
       <div class="support-direction">行き先店舗</div>
       <select class="store-select" onchange="setSupportDest(${i}, this.value)">
         <option value="">選択してください</option>
-        ${otherStores.map(st => `<option value="${st.key}" ${s.to === st.key ? 'selected' : ''}>${st.name}</option>`).join('')}
+        ${storeOptions.map(st => `<option value="${st.key}" ${s.to === st.key ? 'selected' : ''}>${st.name}</option>`).join('')}
       </select>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   // 応援（入）表示
   const inList = sheetDraft.supports.filter(s => s.to === sheetDate.storeKey);
@@ -2435,9 +2439,9 @@ async function openMasterSheet(storeKey, dateKey, section) {
 function renderMasterSheetBody() {
   const { storeKey, dateKey, ym } = masterSheetDate;
   const storeName = STORE_MAP[storeKey]?.name??storeKey;
-  const otherStores = STORES.filter(s => s.key !== storeKey);
   const sd = staffData[storeKey] ?? { staff: [] };
   const staffNames = (sd.staff ?? []).map(s => typeof s === 'string' ? s : s.name);
+  const otherStoresDefault = STORES.filter(s => s.key !== storeKey);
 
   // 公休（マスターから編集可能）
   const holidaysDraft = masterSheetDraft.holidays ?? [];
@@ -2480,7 +2484,7 @@ function renderMasterSheetBody() {
           </div>
           <select class="store-select" onchange="setMasterSupportTo(${i},this.value)" style="margin-bottom:6px;">
             <option value="">行き先を選択</option>
-            ${otherStores.map(s => `<option value="${s.key}" ${sup.to===s.key?'selected':''}>${s.name}</option>`).join('')}
+            ${otherStoresDefault.map(s => `<option value="${s.key}" ${sup.to===s.key?'selected':''}>${s.name}</option>`).join('')}
           </select>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
             <span style="font-size:13px;color:var(--text-sub);">人数：</span>
@@ -2492,6 +2496,9 @@ function renderMasterSheetBody() {
           ${sup.to ? `<div style="font-size:11px;color:var(--text-sub);margin-top:4px;">店舗側で誰が行くか選択します</div>` : ''}
         </div>`;
     } else {
+      const personForSup = (sd.staff ?? []).find(p => (typeof p === 'string' ? p : p.name) === sup.name);
+      const isFreeStaffSup = typeof personForSup === 'object' && personForSup.type === 'free';
+      const storeOptionsForSup = isFreeStaffSup ? STORES : otherStoresDefault;
       return `
         <div style="background:var(--accent-light);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -2500,7 +2507,7 @@ function renderMasterSheetBody() {
           </div>
           <select class="store-select" onchange="setMasterSupportTo(${i},this.value)" style="margin-bottom:6px;">
             <option value="">行き先を選択</option>
-            ${otherStores.map(s => `<option value="${s.key}" ${sup.to===s.key?'selected':''}>${s.name}</option>`).join('')}
+            ${storeOptionsForSup.map(s => `<option value="${s.key}" ${sup.to===s.key?'selected':''}>${s.name}</option>`).join('')}
           </select>
           <div style="margin-top:8px;">
             <div style="font-size:12px;color:var(--text-sub);margin-bottom:6px;">誰が行くか：</div>
