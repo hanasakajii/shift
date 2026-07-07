@@ -2132,7 +2132,8 @@ async function saveSheet() {
   }
 
   // 自店データをmerge（応援（入）はKV最新を優先）
-  const latestSupIn = (latestMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey);
+  // ※ from === to === storeKey の自己完結の応援は他店発扱いにしないよう除外
+  const latestSupIn = (latestMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey && s.from !== storeKey);
   shiftData[storeKey][ym][dateKey] = {
     holidays: sheetDraft.holidays,
     absences: sheetDraft.absences ?? [],
@@ -2720,7 +2721,9 @@ async function saveMasterSheet() {
   }
 
   // 自店データ更新（応援（入）はKV最新を優先、公休はマスターの編集内容を優先）
-  const latestMasterSupIn = (latestMasterMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey);
+  // ※ from === to === storeKey（フリー枠が自店舗に入る自己完結の応援）の場合、
+  //    下のfilterで二重にカウントされないよう、他店発の分のみをKVから取り込む
+  const latestMasterSupIn = (latestMasterMonth?.[dateKey]?.supports ?? []).filter(s => s.to === storeKey && s.from !== storeKey);
   if (!shiftData[storeKey][ym][dateKey]) shiftData[storeKey][ym][dateKey] = { holidays: [], supports: [] };
   shiftData[storeKey][ym][dateKey].supports = [
     ...masterSheetDraft.supports.filter(s => s.from === storeKey),
