@@ -1103,7 +1103,7 @@ function computeStaffLeaveStats(storeKey, ym) {
     holidays.forEach(name => { paidMap[name] = (paidMap[name] ?? 0) + 1; });
   }
 
-  return staffList.map(s => {
+  return staffList.filter(s => s.type !== 'free').map(s => {
     const isPart = s.type === 'part';
     if (isPart) {
       // パートは有給の概念なし。定休日回数＋カレンダー上の休み日数＋特別休業日をすべて公休として計上
@@ -1217,7 +1217,7 @@ async function renderCalCellsWeek(store, ym) {
     const dayData = data[dateKey] ?? { holidays: [], supports: [] };
     const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
     const allStaff = sd.staff ?? [];
-    const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+    const seishainList = allStaff.filter(s => typeof s === 'string' || (s.type !== 'part' && s.type !== 'free')).map(s => typeof s === 'string' ? s : s.name);
     const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
     const minStaff = sd.minStaff ?? 5;
 
@@ -1289,7 +1289,7 @@ function renderCalCells(store, ym) {
   const data = shiftData[store.key]?.[ym] ?? {};
   const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
   const allStaff = sd.staff ?? [];
-  const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+  const seishainList = allStaff.filter(s => typeof s === 'string' || (s.type !== 'part' && s.type !== 'free')).map(s => typeof s === 'string' ? s : s.name);
   const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
   const totalSeishain = seishainList.length;
   const totalPart = partList.length;
@@ -2262,7 +2262,7 @@ function renderDashboard() {
     const cells = filteredStores.map(store => {
       const sd = staffData[store.key] ?? { staff: [], minStaff: 5 };
       const allStaff = sd.staff ?? [];
-      const seishainList = allStaff.filter(s => typeof s === 'string' || s.type !== 'part').map(s => typeof s === 'string' ? s : s.name);
+      const seishainList = allStaff.filter(s => typeof s === 'string' || (s.type !== 'part' && s.type !== 'free')).map(s => typeof s === 'string' ? s : s.name);
       const partList = allStaff.filter(s => typeof s === 'object' && s.type === 'part').map(s => s.name);
       const minStaff = sd.minStaff ?? 5;
       const dayData = shiftData[store.key]?.[ym]?.[dateKey] ?? {};
@@ -2755,6 +2755,8 @@ function renderStaffMgmt() {
   const staffItems = sd.staff.map((s, i) => {
     const name = typeof s === 'string' ? s : s.name;
     const isPart = typeof s === 'object' && s.type === 'part';
+    const isFree = typeof s === 'object' && s.type === 'free';
+    const badge = isPart ? '<span class="part-badge">P</span>' : isFree ? '<span class="part-badge" style="background:#2f5fbf;">F</span>' : '';
     return `
       <div class="staff-list-item" data-idx="${i}" id="staff-item-${i}"
         draggable="true"
@@ -2765,7 +2767,7 @@ function renderStaffMgmt() {
         ontouchmove="staffTouchMove(event)"
         ontouchend="staffTouchEnd(event)">
         <span class="staff-drag-handle">☰</span>
-        <span class="staff-name">${name}${isPart ? '<span class=\"part-badge\">P</span>' : ''}</span>
+        <span class="staff-name">${name}${badge}</span>
         <div class="staff-actions">
           <button class="btn-sm primary" onclick="openMoveStaff('${name}')">移動</button>
           <button class="btn-sm danger" onclick="removeStaff('${name}')">削除</button>
@@ -2793,6 +2795,7 @@ function renderStaffMgmt() {
           <div class="type-toggle">
             <button class="type-btn active" id="type-seishain" onclick="selectType('seishain')">正社員</button>
             <button class="type-btn" id="type-part" onclick="selectType('part')">パート</button>
+            <button class="type-btn" id="type-free" onclick="selectType('free')">フリー</button>
           </div>
           <button class="btn-primary" onclick="addStaff()">追加</button>
         </div>
@@ -3048,6 +3051,7 @@ function selectType(type) {
   newStaffType = type;
   document.getElementById('type-seishain').classList.toggle('active', type === 'seishain');
   document.getElementById('type-part').classList.toggle('active', type === 'part');
+  document.getElementById('type-free').classList.toggle('active', type === 'free');
 }
 
 async function addStaff() {
