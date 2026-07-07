@@ -1571,6 +1571,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
           return `<span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;">${label}</span>`;
         }).join('')}
       </div>
+      ${supOut.length===0 ? `<button class="day-detail-add-btn" onclick="${editFnSupport}">＋</button>` : ''}
     </div>`;
   }
   // フリー枠が自店舗内で完結する応援（出=入=自店舗）は1行にまとめて表示
