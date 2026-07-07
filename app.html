@@ -1242,7 +1242,7 @@ async function renderCalCellsWeek(store, ym) {
     const gaikinNames = gaikin.map(g => g.name);
     const gaikinSeishain = gaikinNames.filter(n => seishainList.includes(n)).length;
     const gaikinPart = gaikinNames.filter(n => partList.includes(n)).length;
-    const supOutCount = supports.filter(s => s.from === store.key).length;
+    const supOutCount = supports.filter(s => s.from === store.key && s.to !== store.key).length;
     const supInCount = supports.filter(s => s.to === store.key).length;
     const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - gaikinSeishain - supOutCount + supInCount;
     const presentPart = partList.length - holidayPart - absencePart - gaikinPart;
@@ -1315,7 +1315,7 @@ function renderCalCells(store, ym) {
     const gaikinNames = gaikin.map(g => g.name);
     const gaikinSeishain = gaikinNames.filter(n => seishainList.includes(n)).length;
     const gaikinPart = gaikinNames.filter(n => partList.includes(n)).length;
-    const supOutCount = dayData.supports?.filter(s => s.from === store.key).length ?? 0;
+    const supOutCount = dayData.supports?.filter(s => s.from === store.key && s.to !== store.key).length ?? 0;
     const supInCount = dayData.supports?.filter(s => s.to === store.key).length ?? 0;
     const presentSeishain = totalSeishain - holidaySeishain - absenceSeishain - gaikinSeishain - supOutCount + supInCount;
     const presentPart = totalPart - holidayPart - absencePart - gaikinPart;
@@ -2311,7 +2311,7 @@ function renderDashboard() {
       const gaikinNames = gaikin.map(g => g.name);
       const gaikinSeishain = gaikinNames.filter(n => seishainList.includes(n)).length;
       const gaikinPart = gaikinNames.filter(n => partList.includes(n)).length;
-      const supOut = supports.filter(s => s.from === store.key).length;
+      const supOut = supports.filter(s => s.from === store.key && s.to !== store.key).length;
       const supIn = supports.filter(s => s.to === store.key).length;
       const presentSeishain = seishainList.length - holidaySeishain - absenceSeishain - gaikinSeishain - supOut + supIn;
       const presentPart = partList.length - holidayPart - absencePart - gaikinPart;
