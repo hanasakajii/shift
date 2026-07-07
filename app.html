@@ -1468,8 +1468,11 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   const absences = dayData.absences ?? [];
   const gaikin = dayData.gaikin ?? [];
   const supports = dayData.supports ?? [];
-  const supOut = supports.filter(s => s.from === storeKey);
-  const supIn = supports.filter(s => s.to === storeKey);
+  const supOutAll = supports.filter(s => s.from === storeKey);
+  const supIn = supports.filter(s => s.to === storeKey && s.from !== storeKey);
+  // フリー枠が自店舗内で完結する応援（出=入=自店舗）は別枠でまとめて表示する
+  const selfSupport = supports.filter(s => s.from === storeKey && s.to === storeKey);
+  const supOut = supOutAll.filter(s => s.to !== storeKey);
   const storeSettings = staffData[storeKey] ?? {};
   const calClosedDow = storeSettings.closedDow ?? (STORE_MAP[storeKey]?.closedDow ?? []);
   const calSpecialClosed = storeSettings.specialClosedDates ?? [];
@@ -1534,7 +1537,8 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
   }
   // 応援（出）セクション: スワイプ削除対応
   if (supOut.length > 0) {
-    supOut.forEach((s, i) => {
+    supOut.forEach((s) => {
+      const i = supOutAll.indexOf(s);
       const toName = STORE_MAP[s.to]?.name??s.to;
       const label = s.type==='count'?`${s.count}名→${toName}`:`${s.name}→${toName}`;
       const delFn = ismaster
@@ -1563,7 +1567,25 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
       </div>
     </div>`;
   }
-  if (supOut.length===0 && supIn.length===0 && (ismaster ? true : (!isClosed && holidays.length===0))) {
+  // フリー枠が自店舗内で完結する応援（出=入=自店舗）は1行にまとめて表示
+  if (selfSupport.length > 0) {
+    selfSupport.forEach((s) => {
+      const i = supOutAll.indexOf(s);
+      const delFn = ismaster
+        ? `deleteSupportFromDetail('${storeKey}','${dateKey}',${i},true)`
+        : `deleteSupportFromDetail('${storeKey}','${dateKey}',${i},false)`;
+      html += `<div class="swipe-row" id="swipe-supself-${i}" ontouchstart="swipeStart(this,event)" ontouchmove="swipeMove(this,event)" ontouchend="swipeEnd(this,event)">
+        <div class="swipe-row-inner">
+          <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">出勤（フリー）</div>
+          <span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;">${s.name}</span>
+          <span style="flex:1;"></span>
+          <button class="day-detail-add-btn" onclick="${editFnSupport}">＋</button>
+        </div>
+        <button class="swipe-delete-btn" onclick="${delFn}">削除</button>
+      </div>`;
+    });
+  }
+  if (supOut.length===0 && supIn.length===0 && selfSupport.length===0 && (ismaster ? true : (!isClosed && holidays.length===0))) {
     html += `<div class="day-detail-item day-detail-section-row">
       <div class="day-detail-label" style="margin-bottom:0;">応援者</div>
       <span style="flex:1;font-size:12px;color:var(--text-sub);">なし</span>
