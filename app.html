@@ -1255,15 +1255,18 @@ async function renderCalCellsWeek(store, ym) {
       ...holidays.map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...absences.map(n => `<span class="cal-tag tag-absence">${n}（欠勤）</span>`),
       ...gaikin.map(g => `<span class="cal-tag tag-gaikin">${g.reason ? `${g.name}（${g.reason}）` : `${g.name}（外勤）`}</span>`),
-      ...supports.filter(s => s.from === store.key).map(s => {
+      ...supports.filter(s => s.from === store.key && s.to !== store.key).map(s => {
         const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
         return `<span class="cal-tag tag-out">${label}</span>`;
       }),
-      ...supports.filter(s => s.to === store.key).map(s => {
+      ...supports.filter(s => s.to === store.key && s.from !== store.key).map(s => {
         const fromName = STORE_MAP[s.from]?.name??s.from;
         const label = s.type === 'count' ? `${fromName}→${s.count}名` : `${s.name}(${fromName})`;
         return `<span class="cal-tag tag-in">${label}</span>`;
+      }),
+      ...supports.filter(s => s.from === store.key && s.to === store.key).map(s => {
+        return `<span class="cal-tag tag-in">${s.name}</span>`;
       }),
     ].join('');
 
@@ -1331,15 +1334,18 @@ function renderCalCells(store, ym) {
       ...(dayData.holidays ?? []).slice(0,2).map(n => `<span class="cal-tag tag-holiday">${n}</span>`),
       ...(dayData.absences ?? []).slice(0,2).map(n => `<span class="cal-tag tag-absence">${n}（欠勤）</span>`),
       ...gaikin.slice(0,2).map(g => `<span class="cal-tag tag-gaikin">${g.reason ? `${g.name}（${g.reason}）` : `${g.name}（外勤）`}</span>`),
-      ...(dayData.supports ?? []).filter(s => s.from === store.key).slice(0,1).map(s => {
+      ...(dayData.supports ?? []).filter(s => s.from === store.key && s.to !== store.key).slice(0,1).map(s => {
         const toName = STORE_MAP[s.to]?.name??s.to;
         const label = s.type === 'count' ? `${s.count}名→${toName}` : `${s.name}→${toName}`;
         return `<span class="cal-tag tag-out">${label}</span>`;
       }),
-      ...(dayData.supports ?? []).filter(s => s.to === store.key).slice(0,1).map(s => {
+      ...(dayData.supports ?? []).filter(s => s.to === store.key && s.from !== store.key).slice(0,1).map(s => {
         const fromName = STORE_MAP[s.from]?.name??s.from;
         const label = s.type === 'count' ? `${fromName}→${s.count}名` : `${s.name}(${fromName})`;
         return `<span class="cal-tag tag-in">${label}</span>`;
+      }),
+      ...(dayData.supports ?? []).filter(s => s.from === store.key && s.to === store.key).slice(0,1).map(s => {
+        return `<span class="cal-tag tag-in">${s.name}</span>`;
       }),
     ].join('');
 
@@ -1576,7 +1582,7 @@ function buildDayDetailHTML(storeKey, dateKey, ismaster) {
         : `deleteSupportFromDetail('${storeKey}','${dateKey}',${i},false)`;
       html += `<div class="swipe-row" id="swipe-supself-${i}" ontouchstart="swipeStart(this,event)" ontouchmove="swipeMove(this,event)" ontouchend="swipeEnd(this,event)">
         <div class="swipe-row-inner">
-          <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">出勤（フリー）</div>
+          <div class="day-detail-label" style="margin-bottom:0;flex-shrink:0;">出勤</div>
           <span class="cal-tag tag-in" style="font-size:12px;padding:4px 8px;display:inline-block;">${s.name}</span>
           <span style="flex:1;"></span>
           <button class="day-detail-add-btn" onclick="${editFnSupport}">＋</button>
